@@ -1,0 +1,28 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: familytree
+      POSTGRES_USER: ft
+      POSTGRES_PASSWORD: ftpass
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgres://ft:ftpass@db:5432/familytree
+      PORT: 3000
+    depends_on:
+      - db
+    volumes:
+      - ./server.js:/app/server.js
+      - ./index.html:/app/index.html
+
+volumes:
+  pgdata:

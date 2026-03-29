@@ -11,13 +11,32 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; overflow: hidden; background: #f5f5f5; }
 
+    /* Landing screen */
+    #landing { position: fixed; inset: 0; background: #f5f5f5; z-index: 200; display: flex; align-items: center; justify-content: center; }
+    #landing.hidden { display: none; }
+    .landing-card { background: #fff; border-radius: 12px; padding: 32px; width: 360px; box-shadow: 0 4px 24px rgba(0,0,0,0.1); text-align: center; }
+    .landing-card h1 { font-size: 24px; margin-bottom: 8px; }
+    .landing-card p { color: #666; font-size: 14px; margin-bottom: 24px; }
+    .landing-card input { width: 100%; padding: 10px 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; text-align: center; letter-spacing: 4px; text-transform: uppercase; margin-bottom: 12px; }
+    .landing-card button { width: 100%; padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 15px; margin-bottom: 8px; }
+    .landing-card .btn-primary { background: #4a90d9; color: #fff; }
+    .landing-card .btn-primary:hover { background: #3a7bc8; }
+    .landing-card .btn-secondary { background: #eee; color: #333; }
+    .landing-card .btn-secondary:hover { background: #ddd; }
+    .landing-card .error { color: #e74c3c; font-size: 13px; margin-bottom: 8px; display: none; }
+    .landing-card .divider { color: #999; font-size: 13px; margin: 16px 0; }
+
+    /* Toolbar */
     #toolbar { position: fixed; top: 0; left: 0; right: 0; height: 48px; background: #fff; border-bottom: 1px solid #ddd; display: flex; align-items: center; padding: 0 16px; z-index: 10; gap: 8px; }
     #toolbar button { padding: 8px 16px; background: #4a90d9; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
     #toolbar button:hover { background: #3a7bc8; }
-    #toolbar .btn-secondary { background: #6c757d; }
-    #toolbar .btn-secondary:hover { background: #5a6268; }
     #toolbar .spacer { flex: 1; }
-    #toolbar .file-input { display: none; }
+    #toolbar .tree-code { font-size: 13px; color: #666; margin-right: 8px; }
+    #toolbar .tree-code span { font-weight: bold; color: #333; letter-spacing: 2px; cursor: pointer; }
+    #toolbar .btn-small { padding: 6px 12px; font-size: 12px; background: #6c757d; }
+    #toolbar .btn-small:hover { background: #5a6268; }
+    .tooltip { position: fixed; background: #333; color: #fff; font-size: 12px; padding: 6px 12px; border-radius: 4px; pointer-events: none; opacity: 0; transform: translateY(4px); transition: opacity 0.2s, transform 0.2s; z-index: 1000; }
+    .tooltip.show { opacity: 1; transform: translateY(0); }
 
     #cy { position: fixed; top: 48px; left: 0; right: 0; bottom: 0; }
 
@@ -31,8 +50,6 @@
     .detail-photo .photo-btn { position: absolute; bottom: 8px; right: 8px; padding: 6px 12px; background: rgba(0,0,0,0.6); color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
     .detail-photo .photo-btn:hover { background: rgba(0,0,0,0.8); }
     .detail-body { padding: 20px; }
-    .detail-body h2 { margin-bottom: 4px; }
-    .detail-body .detail-year { color: #888; font-size: 14px; margin-bottom: 12px; }
     .detail-body .detail-section { margin-top: 12px; }
     .detail-body .detail-section label { font-size: 11px; text-transform: uppercase; color: #999; letter-spacing: 0.5px; }
     .detail-body .detail-section p { margin-top: 2px; font-size: 14px; color: #333; }
@@ -44,7 +61,6 @@
     .detail-actions .btn-delete { background: #e74c3c; color: #fff; }
     .detail-actions .btn-close { background: #eee; color: #333; }
 
-    /* Inline edit fields in detail card */
     .detail-body input, .detail-body textarea { width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; margin-top: 2px; }
     .detail-body textarea { resize: vertical; height: 60px; }
 
@@ -68,12 +84,25 @@
   </style>
 </head>
 <body>
+  <!-- Landing Screen -->
+  <div id="landing">
+    <div class="landing-card">
+      <h1>Family Tree</h1>
+      <p>Create a new tree or join an existing one with a code.</p>
+      <button class="btn-primary" onclick="createTree()">Create New Tree</button>
+      <div class="divider">or join with a code</div>
+      <input type="text" id="joinCode" placeholder="ABC123" maxlength="6">
+      <div class="error" id="joinError">Tree not found. Check the code and try again.</div>
+      <button class="btn-secondary" onclick="joinTree()">Join Tree</button>
+    </div>
+  </div>
+
+  <!-- App -->
   <div id="toolbar">
     <button onclick="openAddModal()">Add Person</button>
     <div class="spacer"></div>
-    <button class="btn-secondary" onclick="exportTree()">Export</button>
-    <button class="btn-secondary" onclick="document.getElementById('importFile').click()">Import</button>
-    <input type="file" id="importFile" class="file-input" accept=".json" onchange="importTree(event)">
+    <div class="tree-code">Code: <span id="treeCodeDisplay" onclick="copyCode()"></span></div>
+    <button class="btn-small" onclick="switchTree()">Switch Tree</button>
   </div>
 
   <div id="parent-banner">
@@ -128,16 +157,107 @@
   <input type="file" id="photoInput" class="photo-file-input" accept="image/*" onchange="handlePhoto(event)">
 
   <script>
-    // ── Generation colors ──
+    // ── State ──
     const GEN_COLORS = [
       '#2ecc71', '#3498db', '#9b59b6', '#e67e22',
       '#e74c3c', '#1abc9c', '#f39c12', '#8e44ad',
     ];
 
+    let currentTreeId = null;
+    let currentTreeCode = null;
     let nextId = 1;
     let people = {};
-    let selectedPersonId = null;  // currently viewing detail
-    let parentMode = null;        // { childId } when in select-parent mode
+    let selectedPersonId = null;
+    let parentMode = null;
+    let ws = null;
+
+    // ── Landing / Tree management ──
+    function showLanding() {
+      document.getElementById('landing').classList.remove('hidden');
+      document.getElementById('joinCode').value = '';
+      document.getElementById('joinError').style.display = 'none';
+    }
+
+    function hideLanding() {
+      document.getElementById('landing').classList.add('hidden');
+    }
+
+    async function createTree() {
+      const res = await fetch('/api/trees', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      const tree = await res.json();
+      enterTree(tree.id, tree.code);
+    }
+
+    async function joinTree() {
+      const code = document.getElementById('joinCode').value.trim().toUpperCase();
+      if (!code) return;
+      const res = await fetch('/api/trees/join/' + code);
+      if (!res.ok) {
+        document.getElementById('joinError').style.display = 'block';
+        return;
+      }
+      const tree = await res.json();
+      enterTree(tree.id, tree.code);
+    }
+
+    function enterTree(treeId, treeCode) {
+      currentTreeId = treeId;
+      currentTreeCode = treeCode;
+      people = {};
+      nextId = 1;
+      cy.elements().remove();
+
+      document.getElementById('treeCodeDisplay').textContent = treeCode;
+      localStorage.setItem('lastTreeId', treeId);
+      localStorage.setItem('lastTreeCode', treeCode);
+      hideLanding();
+      connectWS();
+      loadTreeData();
+    }
+
+    function switchTree() {
+      if (ws) { ws.close(); ws = null; }
+      currentTreeId = null;
+      currentTreeCode = null;
+      people = {};
+      cy.elements().remove();
+      showLanding();
+    }
+
+    function copyCode() {
+      const el = document.getElementById('treeCodeDisplay');
+      navigator.clipboard.writeText(currentTreeCode).then(function() {
+        const rect = el.getBoundingClientRect();
+        const tip = document.createElement('div');
+        tip.className = 'tooltip';
+        tip.textContent = 'Copied!';
+        document.body.appendChild(tip);
+        tip.style.left = (rect.left + rect.width / 2 - tip.offsetWidth / 2) + 'px';
+        tip.style.top = (rect.bottom + 8) + 'px';
+        requestAnimationFrame(function() { tip.classList.add('show'); });
+        setTimeout(function() {
+          tip.classList.remove('show');
+          setTimeout(function() { tip.remove(); }, 200);
+        }, 1200);
+      }).catch(function() {});
+    }
+
+    async function loadTreeData() {
+      const res = await fetch('/api/trees/' + currentTreeId + '/people');
+      const data = await res.json();
+      nextId = data.nextId;
+      people = data.people;
+      rebuildGraph();
+    }
+
+    // Enter key to join
+    document.getElementById('joinCode').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') joinTree();
+    });
 
     // ── Cytoscape setup ──
     const cy = cytoscape({
@@ -193,7 +313,6 @@
       boxSelectionEnabled: false,
     });
 
-    // ── Node tap handling ──
     cy.on('tap', 'node[type="person"]', function(evt) {
       const id = evt.target.id();
       if (parentMode) {
@@ -204,9 +323,7 @@
     });
     cy.on('tap', function(evt) {
       if (evt.target === cy) {
-        if (parentMode) {
-          exitParentMode();
-        }
+        if (parentMode) exitParentMode();
         closeDetail();
       }
     });
@@ -289,7 +406,6 @@
       }
 
       runLayout();
-      persist();
     }
 
     // ── Add Person Modal ──
@@ -299,11 +415,16 @@
       setTimeout(() => document.getElementById('modalName').focus(), 50);
     }
     function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
-    function confirmAdd() {
+    async function confirmAdd() {
       const name = document.getElementById('modalName').value.trim();
       if (!name) return;
-      const id = 'p' + nextId++;
-      people[id] = { id, name, parent1: null, parent2: null, birthYear: '', notes: '', photo: null };
+      const res = await fetch('/api/trees/' + currentTreeId + '/people', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+      const person = await res.json();
+      people[person.id] = person;
       rebuildGraph();
       closeModal();
     }
@@ -322,7 +443,6 @@
       document.getElementById('editBirthYear').value = person.birthYear;
       document.getElementById('editNotes').value = person.notes;
 
-      // Photo
       const photoEl = document.getElementById('detailPhoto');
       const placeholder = document.getElementById('detailPhotoPlaceholder');
       const photoBtn = document.getElementById('detailPhotoBtn');
@@ -340,7 +460,6 @@
         photoBtn.textContent = 'Add Photo';
       }
 
-      // Parents
       const parentsDiv = document.getElementById('detailParents');
       const parentNames = [];
       if (person.parent1 && people[person.parent1]) parentNames.push({ id: person.parent1, name: people[person.parent1].name });
@@ -352,7 +471,6 @@
         parentsDiv.innerHTML = '<label>Parents</label><p style="color:#999">None set</p>';
       }
 
-      // Children
       const childrenDiv = document.getElementById('detailChildren');
       const children = Object.values(people).filter(p => p.parent1 === id || p.parent2 === id);
       if (children.length) {
@@ -365,28 +483,34 @@
       document.getElementById('detail-overlay').classList.add('open');
     }
 
-    function saveCurrentEdits() {
+    async function saveCurrentEdits() {
       const id = document.getElementById('editId').value;
       const person = people[id];
       if (!person) return;
-      const newName = document.getElementById('editName').value.trim();
+      const newName = document.getElementById('editName').value.trim() || 'Unnamed';
       const newYear = document.getElementById('editBirthYear').value.trim();
       const newNotes = document.getElementById('editNotes').value;
-      const changed = person.name !== (newName || 'Unnamed') || person.birthYear !== newYear || person.notes !== newNotes;
-      person.name = newName || 'Unnamed';
+      const changed = person.name !== newName || person.birthYear !== newYear || person.notes !== newNotes;
+      if (!changed) return;
+      person.name = newName;
       person.birthYear = newYear;
       person.notes = newNotes;
-      if (changed) rebuildGraph();
+      rebuildGraph();
+      await fetch('/api/trees/' + currentTreeId + '/people/' + id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName, birthYear: newYear, notes: newNotes })
+      });
     }
 
-    function saveAndCloseDetail() {
-      saveCurrentEdits();
+    async function saveAndCloseDetail() {
+      await saveCurrentEdits();
       document.getElementById('detail-overlay').classList.remove('open');
       selectedPersonId = null;
     }
 
-    function saveAndOpenDetail(id) {
-      saveCurrentEdits();
+    async function saveAndOpenDetail(id) {
+      await saveCurrentEdits();
       openDetail(id);
     }
 
@@ -405,10 +529,11 @@
     function handlePhoto(event) {
       const file = event.target.files[0];
       if (!file || !selectedPersonId) return;
+      const personId = selectedPersonId;
       const reader = new FileReader();
       reader.onload = function(e) {
         const img = new Image();
-        img.onload = function() {
+        img.onload = async function() {
           const canvas = document.createElement('canvas');
           const maxSize = 200;
           let w = img.width, h = img.height;
@@ -417,9 +542,15 @@
           canvas.width = w;
           canvas.height = h;
           canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-          people[selectedPersonId].photo = canvas.toDataURL('image/jpeg', 0.7);
+          const photo = canvas.toDataURL('image/jpeg', 0.7);
+          people[personId].photo = photo;
           rebuildGraph();
-          openDetail(selectedPersonId);
+          openDetail(personId);
+          await fetch('/api/trees/' + currentTreeId + '/people/' + personId, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ photo })
+          });
         };
         img.src = e.target.result;
       };
@@ -428,7 +559,7 @@
     }
 
     // ── Delete from detail ──
-    function deleteFromDetail() {
+    async function deleteFromDetail() {
       const id = selectedPersonId;
       if (!id || !people[id]) return;
       if (!confirm('Delete ' + people[id].name + '?')) return;
@@ -439,20 +570,20 @@
       delete people[id];
       closeDetail();
       rebuildGraph();
+      await fetch('/api/trees/' + currentTreeId + '/people/' + id, { method: 'DELETE' });
     }
 
-    // ── Select Parent Mode ──
+    // ── Select Parent Mode ���─
     function enterParentMode() {
       if (!selectedPersonId) return;
       const person = people[selectedPersonId];
       if (person.parent1 && person.parent2) {
-        alert(person.name + ' already has two parents. Remove one first via Edit.');
+        alert(person.name + ' already has two parents. Remove one first.');
         return;
       }
       parentMode = { childId: selectedPersonId };
       closeDetail();
       document.getElementById('parent-banner').classList.add('open');
-      // Highlight the child node
       cy.getElementById(selectedPersonId).addClass('highlighted');
     }
 
@@ -464,66 +595,87 @@
       document.getElementById('parent-banner').classList.remove('open');
     }
 
-    function assignParent(targetId) {
+    async function assignParent(targetId) {
       if (!parentMode) return;
       const childId = parentMode.childId;
-      if (targetId === childId) return; // can't be own parent
+      if (targetId === childId) return;
       const child = people[childId];
       if (!child) { exitParentMode(); return; }
 
+      const update = {};
       if (!child.parent1) {
         child.parent1 = targetId;
+        update.parent1 = targetId;
       } else if (!child.parent2) {
         if (child.parent1 === targetId) { exitParentMode(); return; }
         child.parent2 = targetId;
+        update.parent2 = targetId;
       }
 
       exitParentMode();
       rebuildGraph();
+      await fetch('/api/trees/' + currentTreeId + '/people/' + childId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(update)
+      });
     }
 
-    // ── LocalStorage ──
-    function persist() {
-      localStorage.setItem('familyTree', JSON.stringify({ nextId, people }));
-    }
-    function loadFromStorage() {
-      const raw = localStorage.getItem('familyTree');
-      if (!raw) return;
-      try {
-        const data = JSON.parse(raw);
-        nextId = data.nextId || 1;
-        people = data.people || {};
-        rebuildGraph();
-      } catch (e) {}
-    }
+    // ── WebSocket for real-time sync ──
+    function connectWS() {
+      if (ws) { ws.close(); ws = null; }
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(proto + '//' + location.host + '/ws');
 
-    // ── Export / Import ──
-    function exportTree() {
-      const data = JSON.stringify({ nextId, people }, null, 2);
-      const blob = new Blob([data], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'family-tree.json'; a.click();
-      URL.revokeObjectURL(url);
-    }
-    function importTree(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        try {
-          const data = JSON.parse(e.target.result);
-          nextId = data.nextId || 1;
-          people = data.people || {};
-          rebuildGraph();
-        } catch (err) { alert('Invalid file format.'); }
+      ws.onopen = function() {
+        ws.send(JSON.stringify({ type: 'join', treeId: currentTreeId }));
       };
-      reader.readAsText(file);
-      event.target.value = '';
+
+      ws.onmessage = function(event) {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'state:full') {
+          nextId = msg.data.nextId;
+          people = msg.data.people;
+          rebuildGraph();
+        } else if (msg.type === 'person:created') {
+          people[msg.person.id] = msg.person;
+          rebuildGraph();
+        } else if (msg.type === 'person:updated') {
+          people[msg.person.id] = msg.person;
+          rebuildGraph();
+          if (selectedPersonId === msg.person.id) openDetail(msg.person.id);
+        } else if (msg.type === 'person:deleted') {
+          delete people[msg.id];
+          msg.affectedChildren.forEach(function(cid) {
+            if (people[cid]) {
+              if (people[cid].parent1 === msg.id) people[cid].parent1 = null;
+              if (people[cid].parent2 === msg.id) people[cid].parent2 = null;
+            }
+          });
+          if (selectedPersonId === msg.id) closeDetail();
+          rebuildGraph();
+        }
+      };
+
+      ws.onclose = function() {
+        if (currentTreeId) setTimeout(connectWS, 2000);
+      };
     }
 
-    // ── Init ──
-    loadFromStorage();
+    // ── Init: try to rejoin last tree, else show landing ──
+    (async function init() {
+      const lastId = localStorage.getItem('lastTreeId');
+      const lastCode = localStorage.getItem('lastTreeCode');
+      if (lastId && lastCode) {
+        // Verify the tree still exists
+        const res = await fetch('/api/trees/join/' + lastCode);
+        if (res.ok) {
+          enterTree(lastId, lastCode);
+          return;
+        }
+      }
+      showLanding();
+    })();
   </script>
 </body>
 </html>
