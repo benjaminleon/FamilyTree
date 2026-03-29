@@ -199,7 +199,7 @@ app.delete('/api/trees/:treeId/people/:id', async (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 waitForDb().then(() => {
-  server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  server.listen(PORT, '0.0.0.0', () => console.log(`Server running on 0.0.0.0:${PORT}`));
 }).catch(e => {
   console.error(e.message);
   process.exit(1);
