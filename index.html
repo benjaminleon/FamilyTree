@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Family Tree</title>
+  <script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+  <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
+  <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; overflow: hidden; background: #f5f5f5; }
+
+    #toolbar { position: fixed; top: 0; left: 0; right: 0; height: 48px; background: #fff; border-bottom: 1px solid #ddd; display: flex; align-items: center; padding: 0 16px; z-index: 10; gap: 8px; }
+    #toolbar button { padding: 8px 16px; background: #4a90d9; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
+    #toolbar button:hover { background: #3a7bc8; }
+    #toolbar .btn-secondary { background: #6c757d; }
+    #toolbar .btn-secondary:hover { background: #5a6268; }
+    #toolbar .spacer { flex: 1; }
+    #toolbar .file-input { display: none; }
+
+    #cy { position: fixed; top: 48px; left: 0; right: 0; bottom: 0; }
+
+    /* Detail card overlay */
+    #detail-overlay { display: none; position: fixed; inset: 0; top: 48px; background: rgba(0,0,0,0.4); z-index: 50; justify-content: center; align-items: center; }
+    #detail-overlay.open { display: flex; }
+    #detail-card { background: #fff; border-radius: 12px; padding: 0; width: 380px; max-height: 80vh; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
+    .detail-photo { width: 100%; height: 200px; background: #e0e0e0; border-radius: 12px 12px 0 0; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; }
+    .detail-photo img { width: 100%; height: 100%; object-fit: cover; }
+    .detail-photo .placeholder { color: #999; font-size: 48px; }
+    .detail-photo .photo-btn { position: absolute; bottom: 8px; right: 8px; padding: 6px 12px; background: rgba(0,0,0,0.6); color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
+    .detail-photo .photo-btn:hover { background: rgba(0,0,0,0.8); }
+    .detail-body { padding: 20px; }
+    .detail-body h2 { margin-bottom: 4px; }
+    .detail-body .detail-year { color: #888; font-size: 14px; margin-bottom: 12px; }
+    .detail-body .detail-section { margin-top: 12px; }
+    .detail-body .detail-section label { font-size: 11px; text-transform: uppercase; color: #999; letter-spacing: 0.5px; }
+    .detail-body .detail-section p { margin-top: 2px; font-size: 14px; color: #333; }
+    .detail-body .detail-section .parent-link { color: #4a90d9; cursor: pointer; }
+    .detail-body .detail-section .parent-link:hover { text-decoration: underline; }
+    .detail-actions { display: flex; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
+    .detail-actions button { padding: 8px 14px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    .detail-actions .btn-parent { background: #2ecc71; color: #fff; }
+    .detail-actions .btn-delete { background: #e74c3c; color: #fff; }
+    .detail-actions .btn-close { background: #eee; color: #333; }
+
+    /* Inline edit fields in detail card */
+    .detail-body input, .detail-body textarea { width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; margin-top: 2px; }
+    .detail-body textarea { resize: vertical; height: 60px; }
+
+    /* Modal overlay for Add Person */
+    #modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; justify-content: center; align-items: center; }
+    #modal-overlay.open { display: flex; }
+    #modal { background: #fff; border-radius: 10px; padding: 24px; width: 320px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
+    #modal h3 { margin-bottom: 16px; }
+    #modal input { width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 15px; margin-bottom: 16px; }
+    #modal .btn-row { display: flex; gap: 8px; }
+    #modal .btn-row button { flex: 1; padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
+    #modal .btn-primary { background: #4a90d9; color: #fff; }
+    #modal .btn-cancel { background: #eee; color: #333; }
+
+    /* Select-parent mode banner */
+    #parent-banner { display: none; position: fixed; top: 48px; left: 0; right: 0; height: 40px; background: #2ecc71; color: #fff; z-index: 20; text-align: center; line-height: 40px; font-size: 14px; }
+    #parent-banner.open { display: block; }
+    #parent-banner button { margin-left: 12px; padding: 4px 12px; background: rgba(255,255,255,0.3); color: #fff; border: 1px solid rgba(255,255,255,0.5); border-radius: 4px; cursor: pointer; font-size: 13px; }
+
+    .photo-file-input { display: none; }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <button onclick="openAddModal()">Add Person</button>
+    <div class="spacer"></div>
+    <button class="btn-secondary" onclick="exportTree()">Export</button>
+    <button class="btn-secondary" onclick="document.getElementById('importFile').click()">Import</button>
+    <input type="file" id="importFile" class="file-input" accept=".json" onchange="importTree(event)">
+  </div>
+
+  <div id="parent-banner">
+    Click a person to set as parent. <button onclick="exitParentMode()">Cancel</button>
+  </div>
+
+  <div id="cy"></div>
+
+  <!-- Add Person Modal -->
+  <div id="modal-overlay" onclick="if(event.target===this)closeModal()">
+    <div id="modal">
+      <h3>Add Person</h3>
+      <input type="text" id="modalName" placeholder="Name" autofocus>
+      <div class="btn-row">
+        <button class="btn-primary" onclick="confirmAdd()">Add</button>
+        <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detail Card Overlay -->
+  <div id="detail-overlay" onclick="if(event.target===this)saveAndCloseDetail()">
+    <div id="detail-card">
+      <div class="detail-photo" id="detailPhoto">
+        <span class="placeholder" id="detailPhotoPlaceholder">?</span>
+        <button class="photo-btn" id="detailPhotoBtn" onclick="document.getElementById('photoInput').click()">Add Photo</button>
+      </div>
+      <div class="detail-body">
+        <input type="hidden" id="editId">
+        <div class="detail-section">
+          <label>Name</label>
+          <input type="text" id="editName">
+        </div>
+        <div class="detail-section">
+          <label>Birth Year</label>
+          <input type="text" id="editBirthYear" placeholder="e.g. 1990">
+        </div>
+        <div class="detail-section" id="detailParents"></div>
+        <div class="detail-section" id="detailChildren"></div>
+        <div class="detail-section">
+          <label>Notes</label>
+          <textarea id="editNotes"></textarea>
+        </div>
+        <div class="detail-actions">
+          <button class="btn-parent" onclick="enterParentMode()">Select Parent</button>
+          <button class="btn-delete" onclick="deleteFromDetail()">Delete</button>
+          <button class="btn-close" onclick="saveAndCloseDetail()">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <input type="file" id="photoInput" class="photo-file-input" accept="image/*" onchange="handlePhoto(event)">
+
+  <script>
+    // ── Generation colors ──
+    const GEN_COLORS = [
+      '#2ecc71', '#3498db', '#9b59b6', '#e67e22',
+      '#e74c3c', '#1abc9c', '#f39c12', '#8e44ad',
+    ];
+
+    let nextId = 1;
+    let people = {};
+    let selectedPersonId = null;  // currently viewing detail
+    let parentMode = null;        // { childId } when in select-parent mode
+
+    // ── Cytoscape setup ──
+    const cy = cytoscape({
+      container: document.getElementById('cy'),
+      style: [
+        { selector: 'node[type="person"]', style: {
+          'label': 'data(label)',
+          'text-valign': 'center',
+          'text-halign': 'center',
+          'background-color': 'data(color)',
+          'background-image': 'data(photo)',
+          'background-fit': 'cover',
+          'background-opacity': 1,
+          'color': '#fff',
+          'font-size': '13px',
+          'width': 'label',
+          'height': 32,
+          'padding': '10px',
+          'shape': 'round-rectangle',
+          'text-wrap': 'wrap',
+          'text-max-width': '120px',
+        }},
+        { selector: 'node[type="person"][?hasPhoto]', style: {
+          'width': 60,
+          'height': 60,
+          'shape': 'ellipse',
+          'text-valign': 'bottom',
+          'text-margin-y': 8,
+          'color': '#333',
+          'font-weight': 'bold',
+          'text-background-color': '#fff',
+          'text-background-opacity': 0.7,
+          'text-background-padding': '2px',
+          'text-background-shape': 'round-rectangle',
+        }},
+        { selector: 'node[type="couple"]', style: {
+          'width': 1, 'height': 1, 'background-opacity': 0, 'label': '',
+        }},
+        { selector: 'edge[etype="couple"]', style: {
+          'width': 2, 'line-color': '#e74c3c', 'curve-style': 'straight',
+        }},
+        { selector: 'edge[etype="child"]', style: {
+          'width': 2, 'line-color': '#999', 'curve-style': 'straight',
+        }},
+        { selector: 'node:active', style: { 'overlay-opacity': 0.1 }},
+        { selector: 'node.highlighted', style: {
+          'border-width': 3, 'border-color': '#f1c40f',
+        }},
+      ],
+      layout: { name: 'preset' },
+      userZoomingEnabled: true,
+      userPanningEnabled: true,
+      boxSelectionEnabled: false,
+    });
+
+    // ── Node tap handling ──
+    cy.on('tap', 'node[type="person"]', function(evt) {
+      const id = evt.target.id();
+      if (parentMode) {
+        assignParent(id);
+      } else {
+        openDetail(id);
+      }
+    });
+    cy.on('tap', function(evt) {
+      if (evt.target === cy) {
+        if (parentMode) {
+          exitParentMode();
+        }
+        closeDetail();
+      }
+    });
+
+    // ── Layout ──
+    function runLayout() {
+      cy.layout({
+        name: 'dagre',
+        rankDir: 'TB',
+        nodeSep: 50,
+        rankSep: 80,
+        animate: true,
+        animationDuration: 300,
+      }).run();
+    }
+
+    // ── Generation calculation ──
+    function computeGenerations() {
+      const gen = {};
+      function getGen(id) {
+        if (gen[id] !== undefined) return gen[id];
+        const p = people[id];
+        if (!p) return 0;
+        if (!p.parent1 && !p.parent2) { gen[id] = 0; return 0; }
+        gen[id] = -1;
+        let parentGen = 0;
+        if (p.parent1 && gen[p.parent1] !== -1) parentGen = Math.max(parentGen, getGen(p.parent1) + 1);
+        if (p.parent2 && gen[p.parent2] !== -1) parentGen = Math.max(parentGen, getGen(p.parent2) + 1);
+        gen[id] = parentGen;
+        return parentGen;
+      }
+      for (const id in people) getGen(id);
+      const vals = Object.values(gen);
+      if (vals.length === 0) return gen;
+      const minGen = Math.min(...vals.filter(v => v >= 0));
+      for (const id in gen) if (gen[id] >= 0) gen[id] -= minGen;
+      const maxGen = Math.max(...Object.values(gen));
+      for (const id in gen) gen[id] = maxGen - gen[id];
+      return gen;
+    }
+
+    // ── Rebuild graph ──
+    function rebuildGraph() {
+      cy.elements().remove();
+      const gens = computeGenerations();
+
+      for (const id in people) {
+        const p = people[id];
+        const g = gens[id] || 0;
+        const label = p.birthYear ? p.name + '\n' + p.birthYear : p.name;
+        const nodeData = { id, label, type: 'person', color: GEN_COLORS[g % GEN_COLORS.length] };
+        if (p.photo) {
+          nodeData.photo = p.photo;
+          nodeData.hasPhoto = true;
+        } else {
+          nodeData.photo = 'none';
+          nodeData.hasPhoto = false;
+        }
+        cy.add({ data: nodeData });
+      }
+
+      const coupleMap = {};
+      for (const id in people) {
+        const p = people[id];
+        if (p.parent1 && p.parent2) {
+          const coupleKey = [p.parent1, p.parent2].sort().join('-');
+          if (!coupleMap[coupleKey]) {
+            const cid = 'couple-' + coupleKey;
+            coupleMap[coupleKey] = cid;
+            cy.add({ data: { id: cid, type: 'couple' } });
+            cy.add({ data: { id: cid + '-a', source: p.parent1, target: cid, etype: 'couple' } });
+            cy.add({ data: { id: cid + '-b', source: p.parent2, target: cid, etype: 'couple' } });
+          }
+          cy.add({ data: { id: id + '-child', source: coupleMap[coupleKey], target: id, etype: 'child' } });
+        } else if (p.parent1) {
+          cy.add({ data: { id: id + '-p1', source: p.parent1, target: id, etype: 'child' } });
+        } else if (p.parent2) {
+          cy.add({ data: { id: id + '-p2', source: p.parent2, target: id, etype: 'child' } });
+        }
+      }
+
+      runLayout();
+      persist();
+    }
+
+    // ── Add Person Modal ──
+    function openAddModal() {
+      document.getElementById('modalName').value = '';
+      document.getElementById('modal-overlay').classList.add('open');
+      setTimeout(() => document.getElementById('modalName').focus(), 50);
+    }
+    function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
+    function confirmAdd() {
+      const name = document.getElementById('modalName').value.trim();
+      if (!name) return;
+      const id = 'p' + nextId++;
+      people[id] = { id, name, parent1: null, parent2: null, birthYear: '', notes: '', photo: null };
+      rebuildGraph();
+      closeModal();
+    }
+    document.getElementById('modalName').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') confirmAdd();
+      if (e.key === 'Escape') closeModal();
+    });
+
+    // ── Detail Card (inline editable) ──
+    function openDetail(id) {
+      const person = people[id];
+      if (!person) return;
+      selectedPersonId = id;
+      document.getElementById('editId').value = id;
+      document.getElementById('editName').value = person.name;
+      document.getElementById('editBirthYear').value = person.birthYear;
+      document.getElementById('editNotes').value = person.notes;
+
+      // Photo
+      const photoEl = document.getElementById('detailPhoto');
+      const placeholder = document.getElementById('detailPhotoPlaceholder');
+      const photoBtn = document.getElementById('detailPhotoBtn');
+      const existingImg = photoEl.querySelector('img');
+      if (existingImg) existingImg.remove();
+
+      if (person.photo) {
+        placeholder.style.display = 'none';
+        const img = document.createElement('img');
+        img.src = person.photo;
+        photoEl.insertBefore(img, photoBtn);
+        photoBtn.textContent = 'Change Photo';
+      } else {
+        placeholder.style.display = '';
+        photoBtn.textContent = 'Add Photo';
+      }
+
+      // Parents
+      const parentsDiv = document.getElementById('detailParents');
+      const parentNames = [];
+      if (person.parent1 && people[person.parent1]) parentNames.push({ id: person.parent1, name: people[person.parent1].name });
+      if (person.parent2 && people[person.parent2]) parentNames.push({ id: person.parent2, name: people[person.parent2].name });
+      if (parentNames.length) {
+        parentsDiv.innerHTML = '<label>Parents</label><p>' +
+          parentNames.map(p => '<span class="parent-link" onclick="saveAndOpenDetail(\'' + p.id + '\')">' + escHtml(p.name) + '</span>').join(', ') + '</p>';
+      } else {
+        parentsDiv.innerHTML = '<label>Parents</label><p style="color:#999">None set</p>';
+      }
+
+      // Children
+      const childrenDiv = document.getElementById('detailChildren');
+      const children = Object.values(people).filter(p => p.parent1 === id || p.parent2 === id);
+      if (children.length) {
+        childrenDiv.innerHTML = '<label>Children</label><p>' +
+          children.map(c => '<span class="parent-link" onclick="saveAndOpenDetail(\'' + c.id + '\')">' + escHtml(c.name) + '</span>').join(', ') + '</p>';
+      } else {
+        childrenDiv.innerHTML = '';
+      }
+
+      document.getElementById('detail-overlay').classList.add('open');
+    }
+
+    function saveCurrentEdits() {
+      const id = document.getElementById('editId').value;
+      const person = people[id];
+      if (!person) return;
+      const newName = document.getElementById('editName').value.trim();
+      const newYear = document.getElementById('editBirthYear').value.trim();
+      const newNotes = document.getElementById('editNotes').value;
+      const changed = person.name !== (newName || 'Unnamed') || person.birthYear !== newYear || person.notes !== newNotes;
+      person.name = newName || 'Unnamed';
+      person.birthYear = newYear;
+      person.notes = newNotes;
+      if (changed) rebuildGraph();
+    }
+
+    function saveAndCloseDetail() {
+      saveCurrentEdits();
+      document.getElementById('detail-overlay').classList.remove('open');
+      selectedPersonId = null;
+    }
+
+    function saveAndOpenDetail(id) {
+      saveCurrentEdits();
+      openDetail(id);
+    }
+
+    function closeDetail() {
+      document.getElementById('detail-overlay').classList.remove('open');
+      selectedPersonId = null;
+    }
+
+    function escHtml(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    // ── Photo handling ──
+    function handlePhoto(event) {
+      const file = event.target.files[0];
+      if (!file || !selectedPersonId) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.createElement('canvas');
+          const maxSize = 200;
+          let w = img.width, h = img.height;
+          if (w > h) { h = h * maxSize / w; w = maxSize; }
+          else { w = w * maxSize / h; h = maxSize; }
+          canvas.width = w;
+          canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          people[selectedPersonId].photo = canvas.toDataURL('image/jpeg', 0.7);
+          rebuildGraph();
+          openDetail(selectedPersonId);
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+      event.target.value = '';
+    }
+
+    // ── Delete from detail ──
+    function deleteFromDetail() {
+      const id = selectedPersonId;
+      if (!id || !people[id]) return;
+      if (!confirm('Delete ' + people[id].name + '?')) return;
+      for (const pid in people) {
+        if (people[pid].parent1 === id) people[pid].parent1 = null;
+        if (people[pid].parent2 === id) people[pid].parent2 = null;
+      }
+      delete people[id];
+      closeDetail();
+      rebuildGraph();
+    }
+
+    // ── Select Parent Mode ──
+    function enterParentMode() {
+      if (!selectedPersonId) return;
+      const person = people[selectedPersonId];
+      if (person.parent1 && person.parent2) {
+        alert(person.name + ' already has two parents. Remove one first via Edit.');
+        return;
+      }
+      parentMode = { childId: selectedPersonId };
+      closeDetail();
+      document.getElementById('parent-banner').classList.add('open');
+      // Highlight the child node
+      cy.getElementById(selectedPersonId).addClass('highlighted');
+    }
+
+    function exitParentMode() {
+      if (parentMode) {
+        cy.getElementById(parentMode.childId).removeClass('highlighted');
+      }
+      parentMode = null;
+      document.getElementById('parent-banner').classList.remove('open');
+    }
+
+    function assignParent(targetId) {
+      if (!parentMode) return;
+      const childId = parentMode.childId;
+      if (targetId === childId) return; // can't be own parent
+      const child = people[childId];
+      if (!child) { exitParentMode(); return; }
+
+      if (!child.parent1) {
+        child.parent1 = targetId;
+      } else if (!child.parent2) {
+        if (child.parent1 === targetId) { exitParentMode(); return; }
+        child.parent2 = targetId;
+      }
+
+      exitParentMode();
+      rebuildGraph();
+    }
+
+    // ── LocalStorage ──
+    function persist() {
+      localStorage.setItem('familyTree', JSON.stringify({ nextId, people }));
+    }
+    function loadFromStorage() {
+      const raw = localStorage.getItem('familyTree');
+      if (!raw) return;
+      try {
+        const data = JSON.parse(raw);
+        nextId = data.nextId || 1;
+        people = data.people || {};
+        rebuildGraph();
+      } catch (e) {}
+    }
+
+    // ── Export / Import ──
+    function exportTree() {
+      const data = JSON.stringify({ nextId, people }, null, 2);
+      const blob = new Blob([data], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'family-tree.json'; a.click();
+      URL.revokeObjectURL(url);
+    }
+    function importTree(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const data = JSON.parse(e.target.result);
+          nextId = data.nextId || 1;
+          people = data.people || {};
+          rebuildGraph();
+        } catch (err) { alert('Invalid file format.'); }
+      };
+      reader.readAsText(file);
+      event.target.value = '';
+    }
+
+    // ── Init ──
+    loadFromStorage();
+  </script>
+</body>
+</html>
