@@ -23,6 +23,7 @@ services:
     volumes:
       - ./server.js:/app/server.js
       - ./index.html:/app/index.html
+    command: npx nodemon server.js
 
 volumes:
   pgdata:
