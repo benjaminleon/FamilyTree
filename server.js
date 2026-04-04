@@ -196,6 +196,11 @@ app.delete('/api/trees/:treeId/people/:id', async (req, res) => {
   }
 });
 
+// Serve index.html for /tree/:code URLs (shareable links)
+app.get('/tree/:code', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
 const PORT = process.env.PORT || 3000;
 
 waitForDb().then(() => {

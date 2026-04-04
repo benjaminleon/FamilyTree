@@ -242,6 +242,7 @@
       document.getElementById('treeCodeDisplay').textContent = treeCode;
       localStorage.setItem('lastTreeId', treeId);
       localStorage.setItem('lastTreeCode', treeCode);
+      history.replaceState({ treeId, treeCode }, '', '/tree/' + treeCode);
       hideLanding();
       connectWS();
       loadTreeData();
@@ -253,16 +254,18 @@
       currentTreeCode = null;
       people = {};
       cy.elements().remove();
+      history.replaceState(null, '', '/');
       showLanding();
     }
 
     function copyCode() {
       const el = document.getElementById('treeCodeDisplay');
-      navigator.clipboard.writeText(currentTreeCode).then(function() {
+      const shareUrl = location.origin + '/tree/' + currentTreeCode;
+      navigator.clipboard.writeText(shareUrl).then(function() {
         const rect = el.getBoundingClientRect();
         const tip = document.createElement('div');
         tip.className = 'tooltip';
-        tip.textContent = 'Copied!';
+        tip.textContent = 'Link copied!';
         document.body.appendChild(tip);
         tip.style.left = (rect.left + rect.width / 2 - tip.offsetWidth / 2) + 'px';
         tip.style.top = (rect.bottom + 8) + 'px';
@@ -757,12 +760,23 @@
       };
     }
 
-    // ── Init: try to rejoin last tree, else show landing ──
+    // ── Init: check URL for tree code, then localStorage, else show landing ──
     (async function init() {
+      // Check URL first (e.g. /tree/ABC123)
+      const urlMatch = location.pathname.match(/^\/tree\/([A-Fa-f0-9]{6})$/);
+      if (urlMatch) {
+        const res = await fetch('/api/trees/join/' + urlMatch[1]);
+        if (res.ok) {
+          const tree = await res.json();
+          enterTree(tree.id, tree.code);
+          return;
+        }
+      }
+
+      // Fall back to localStorage
       const lastId = localStorage.getItem('lastTreeId');
       const lastCode = localStorage.getItem('lastTreeCode');
       if (lastId && lastCode) {
-        // Verify the tree still exists
         const res = await fetch('/api/trees/join/' + lastCode);
         if (res.ok) {
           enterTree(lastId, lastCode);
