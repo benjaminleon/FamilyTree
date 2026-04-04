@@ -80,6 +80,11 @@
     #parent-banner.open { display: block; }
     #parent-banner button { margin-left: 12px; padding: 4px 12px; background: rgba(255,255,255,0.3); color: #fff; border: 1px solid rgba(255,255,255,0.5); border-radius: 4px; cursor: pointer; font-size: 13px; }
 
+    /* Bloodline banner */
+    #bloodline-banner { display: none; position: fixed; top: 48px; left: 0; right: 0; height: 40px; background: #3498db; color: #fff; z-index: 20; text-align: center; line-height: 40px; font-size: 14px; }
+    #bloodline-banner.open { display: block; }
+    #bloodline-banner button { margin-left: 12px; padding: 4px 12px; background: rgba(255,255,255,0.3); color: #fff; border: 1px solid rgba(255,255,255,0.5); border-radius: 4px; cursor: pointer; font-size: 13px; }
+
     .photo-file-input { display: none; }
 
     /* Mobile */
@@ -115,6 +120,7 @@
   <!-- App -->
   <div id="toolbar">
     <button onclick="openAddModal()">Add Person</button>
+    <button id="bloodlineBtn" onclick="toggleBloodlineMode()">Show Bloodline</button>
     <div class="spacer"></div>
     <div class="tree-code">Code: <span id="treeCodeDisplay" onclick="copyCode()"></span></div>
     <button class="btn-small" onclick="switchTree()">Switch Tree</button>
@@ -122,6 +128,11 @@
 
   <div id="parent-banner">
     Click a person to set as parent. <button onclick="exitParentMode()">Cancel</button>
+  </div>
+
+  <div id="bloodline-banner">
+    <span id="bloodline-banner-text">Click a person to show their bloodline.</span>
+    <button onclick="clearBloodlineMode()">Cancel</button>
   </div>
 
   <div id="cy"></div>
@@ -184,6 +195,8 @@
     let people = {};
     let selectedPersonId = null;
     let parentMode = null;
+    let bloodlineMode = false;   // true when selecting or filtering
+    let bloodlinePersonId = null; // person whose bloodline is shown
     let ws = null;
 
     // ── Landing / Tree management ──
@@ -332,6 +345,8 @@
       const id = evt.target.id();
       if (parentMode) {
         assignParent(id);
+      } else if (bloodlineMode && !bloodlinePersonId) {
+        applyBloodlineFilter(id);
       } else {
         openDetail(id);
       }
@@ -380,12 +395,44 @@
       return gen;
     }
 
+    // ── Bloodline calculation ──
+    function getBloodRelatives(personId) {
+      const blood = new Set();
+      // Step 1: collect all ancestors
+      const ancestors = new Set();
+      function addAncestors(id) {
+        if (!id || ancestors.has(id) || !people[id]) return;
+        ancestors.add(id);
+        addAncestors(people[id].parent1);
+        addAncestors(people[id].parent2);
+      }
+      addAncestors(personId);
+
+      // Step 2: collect all descendants of every ancestor
+      function addDescendants(id) {
+        if (!id || blood.has(id) || !people[id]) return;
+        blood.add(id);
+        for (const cid in people) {
+          if (people[cid].parent1 === id || people[cid].parent2 === id) {
+            addDescendants(cid);
+          }
+        }
+      }
+      for (const aid of ancestors) {
+        addDescendants(aid);
+      }
+
+      return blood;
+    }
+
     // ── Rebuild graph ──
     function rebuildGraph() {
       cy.elements().remove();
       const gens = computeGenerations();
+      const bloodSet = (bloodlineMode && bloodlinePersonId) ? getBloodRelatives(bloodlinePersonId) : null;
 
       for (const id in people) {
+        if (bloodSet && !bloodSet.has(id)) continue;
         const p = people[id];
         const g = gens[id] || 0;
         const label = p.birthYear ? p.name + '\n' + p.birthYear : p.name;
@@ -402,8 +449,11 @@
 
       const coupleMap = {};
       for (const id in people) {
+        if (bloodSet && !bloodSet.has(id)) continue;
         const p = people[id];
-        if (p.parent1 && p.parent2) {
+        const visibleP1 = p.parent1 && (!bloodSet || bloodSet.has(p.parent1));
+        const visibleP2 = p.parent2 && (!bloodSet || bloodSet.has(p.parent2));
+        if (visibleP1 && visibleP2) {
           const coupleKey = [p.parent1, p.parent2].sort().join('-');
           if (!coupleMap[coupleKey]) {
             const cid = 'couple-' + coupleKey;
@@ -413,9 +463,9 @@
             cy.add({ data: { id: cid + '-b', source: p.parent2, target: cid, etype: 'couple' } });
           }
           cy.add({ data: { id: id + '-child', source: coupleMap[coupleKey], target: id, etype: 'child' } });
-        } else if (p.parent1) {
+        } else if (visibleP1) {
           cy.add({ data: { id: id + '-p1', source: p.parent1, target: id, etype: 'child' } });
-        } else if (p.parent2) {
+        } else if (visibleP2) {
           cy.add({ data: { id: id + '-p2', source: p.parent2, target: id, etype: 'child' } });
         }
       }
@@ -584,6 +634,7 @@
       }
       delete people[id];
       closeDetail();
+      if (bloodlinePersonId === id) clearBloodlineMode();
       rebuildGraph();
       await fetch('/api/trees/' + currentTreeId + '/people/' + id, { method: 'DELETE' });
     }
@@ -636,6 +687,34 @@
       });
     }
 
+    // ── Bloodline filter mode ──
+    function toggleBloodlineMode() {
+      if (bloodlineMode) {
+        clearBloodlineMode();
+      } else {
+        bloodlineMode = true;
+        bloodlinePersonId = null;
+        document.getElementById('bloodlineBtn').textContent = 'Show All';
+        document.getElementById('bloodline-banner-text').textContent = 'Click a person to show their bloodline.';
+        document.getElementById('bloodline-banner').classList.add('open');
+      }
+    }
+
+    function applyBloodlineFilter(id) {
+      if (!people[id]) return;
+      bloodlinePersonId = id;
+      document.getElementById('bloodline-banner-text').innerHTML = 'Showing bloodline for <b>' + escHtml(people[id].name) + '</b>.';
+      rebuildGraph();
+    }
+
+    function clearBloodlineMode() {
+      bloodlineMode = false;
+      bloodlinePersonId = null;
+      document.getElementById('bloodlineBtn').textContent = 'Show Bloodline';
+      document.getElementById('bloodline-banner').classList.remove('open');
+      rebuildGraph();
+    }
+
     // ── WebSocket for real-time sync ──
     function connectWS() {
       if (ws) { ws.close(); ws = null; }
@@ -668,6 +747,7 @@
             }
           });
           if (selectedPersonId === msg.id) closeDetail();
+          if (bloodlinePersonId === msg.id) clearBloodlineMode();
           rebuildGraph();
         }
       };
