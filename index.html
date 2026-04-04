@@ -60,6 +60,7 @@
     .detail-actions .btn-parent { background: #2ecc71; color: #fff; }
     .detail-actions .btn-delete { background: #e74c3c; color: #fff; }
     .detail-actions .btn-close { background: #eee; color: #333; }
+    .detail-actions .btn-hide { background: #95a5a6; color: #fff; }
 
     .detail-body input, .detail-body textarea { width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; margin-top: 2px; }
     .detail-body textarea { resize: vertical; height: 60px; }
@@ -173,6 +174,7 @@
           <textarea id="editNotes"></textarea>
         </div>
         <div class="detail-actions">
+          <button class="btn-hide" id="btnHideChildren" onclick="toggleHideChildren()">Hide Children</button>
           <button class="btn-parent" onclick="enterParentMode()">Select Parent</button>
           <button class="btn-delete" onclick="deleteFromDetail()">Delete</button>
           <button class="btn-close" onclick="saveAndCloseDetail()">Close</button>
@@ -197,6 +199,7 @@
     let parentMode = null;
     let bloodlineMode = false;   // true when selecting or filtering
     let bloodlinePersonId = null; // person whose bloodline is shown
+    let hiddenChildrenSet = new Set();
     let ws = null;
 
     // ── Landing / Tree management ──
@@ -253,6 +256,7 @@
       currentTreeId = null;
       currentTreeCode = null;
       people = {};
+      hiddenChildrenSet.clear();
       cy.elements().remove();
       history.replaceState(null, '', '/');
       showLanding();
@@ -434,12 +438,27 @@
       const gens = computeGenerations();
       const bloodSet = (bloodlineMode && bloodlinePersonId) ? getBloodRelatives(bloodlinePersonId) : null;
 
+      const hideSet = new Set();
+      function collectDescendants(pid) {
+        for (const cid in people) {
+          if (hideSet.has(cid)) continue;
+          if (people[cid].parent1 === pid || people[cid].parent2 === pid) {
+            hideSet.add(cid);
+            collectDescendants(cid);
+          }
+        }
+      }
+      for (const pid of hiddenChildrenSet) {
+        if (people[pid]) collectDescendants(pid);
+      }
+
       for (const id in people) {
         if (bloodSet && !bloodSet.has(id)) continue;
+        if (hideSet.has(id)) continue;
         const p = people[id];
         const g = gens[id] || 0;
         const label = p.birthYear ? p.name + '\n' + p.birthYear : p.name;
-        const nodeData = { id, label, type: 'person', color: GEN_COLORS[g % GEN_COLORS.length] };
+        const nodeData = { id, label, type: 'person', color: hiddenChildrenSet.has(id) ? '#bdc3c7' : GEN_COLORS[g % GEN_COLORS.length] };
         if (p.photo) {
           nodeData.photo = p.photo;
           nodeData.hasPhoto = true;
@@ -453,9 +472,10 @@
       const coupleMap = {};
       for (const id in people) {
         if (bloodSet && !bloodSet.has(id)) continue;
+        if (hideSet.has(id)) continue;
         const p = people[id];
-        const visibleP1 = p.parent1 && (!bloodSet || bloodSet.has(p.parent1));
-        const visibleP2 = p.parent2 && (!bloodSet || bloodSet.has(p.parent2));
+        const visibleP1 = p.parent1 && (!bloodSet || bloodSet.has(p.parent1)) && !hideSet.has(p.parent1);
+        const visibleP2 = p.parent2 && (!bloodSet || bloodSet.has(p.parent2)) && !hideSet.has(p.parent2);
         if (visibleP1 && visibleP2) {
           const coupleKey = [p.parent1, p.parent2].sort().join('-');
           if (!coupleMap[coupleKey]) {
@@ -548,6 +568,14 @@
         childrenDiv.innerHTML = '';
       }
 
+      const btnHide = document.getElementById('btnHideChildren');
+      if (children.length === 0) {
+        btnHide.style.display = 'none';
+      } else {
+        btnHide.style.display = '';
+        btnHide.textContent = hiddenChildrenSet.has(id) ? 'Show Children' : 'Hide Children';
+      }
+
       document.getElementById('detail-overlay').classList.add('open');
     }
 
@@ -636,13 +664,28 @@
         if (people[pid].parent2 === id) people[pid].parent2 = null;
       }
       delete people[id];
+      hiddenChildrenSet.delete(id);
       closeDetail();
       if (bloodlinePersonId === id) clearBloodlineMode();
       rebuildGraph();
       await fetch('/api/trees/' + currentTreeId + '/people/' + id, { method: 'DELETE' });
     }
 
-    // ── Select Parent Mode ���─
+    // ── Hide Children Toggle ──
+    function toggleHideChildren() {
+      const id = selectedPersonId;
+      if (!id) return;
+      if (hiddenChildrenSet.has(id)) {
+        hiddenChildrenSet.delete(id);
+      } else {
+        hiddenChildrenSet.add(id);
+      }
+      document.getElementById('detail-overlay').classList.remove('open');
+      selectedPersonId = null;
+      rebuildGraph();
+    }
+
+    // ── Select Parent Mode ───
     function enterParentMode() {
       if (!selectedPersonId) return;
       const person = people[selectedPersonId];
