@@ -61,6 +61,7 @@
     .detail-actions .btn-delete { background: #e74c3c; color: #fff; }
     .detail-actions .btn-close { background: #eee; color: #333; }
     .detail-actions .btn-hide { background: #95a5a6; color: #fff; }
+    .detail-actions .btn-partner { background: #5dade2; color: #fff; }
 
     .detail-body input, .detail-body textarea { width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; margin-top: 2px; }
     .detail-body textarea { resize: vertical; height: 60px; }
@@ -80,6 +81,11 @@
     #parent-banner { display: none; position: fixed; top: 48px; left: 0; right: 0; height: 40px; background: #2ecc71; color: #fff; z-index: 20; text-align: center; line-height: 40px; font-size: 14px; }
     #parent-banner.open { display: block; }
     #parent-banner button { margin-left: 12px; padding: 4px 12px; background: rgba(255,255,255,0.3); color: #fff; border: 1px solid rgba(255,255,255,0.5); border-radius: 4px; cursor: pointer; font-size: 13px; }
+
+    /* Select-partner mode banner */
+    #partner-banner { display: none; position: fixed; top: 48px; left: 0; right: 0; height: 40px; background: #e74c3c; color: #fff; z-index: 20; text-align: center; line-height: 40px; font-size: 14px; }
+    #partner-banner.open { display: block; }
+    #partner-banner button { margin-left: 12px; padding: 4px 12px; background: rgba(255,255,255,0.3); color: #fff; border: 1px solid rgba(255,255,255,0.5); border-radius: 4px; cursor: pointer; font-size: 13px; }
 
     /* Bloodline banner */
     #bloodline-banner { display: none; position: fixed; top: 48px; left: 0; right: 0; height: 40px; background: #3498db; color: #fff; z-index: 20; text-align: center; line-height: 40px; font-size: 14px; }
@@ -131,6 +137,10 @@
     Click a person to set as parent. <button onclick="exitParentMode()">Cancel</button>
   </div>
 
+  <div id="partner-banner">
+    Click a person to set as partner. <button onclick="exitPartnerMode()">Cancel</button>
+  </div>
+
   <div id="bloodline-banner">
     <span id="bloodline-banner-text">Click a person to show their bloodline.</span>
     <button onclick="clearBloodlineMode()">Cancel</button>
@@ -167,6 +177,7 @@
           <label>Birth Year</label>
           <input type="text" id="editBirthYear" placeholder="e.g. 1990">
         </div>
+        <div class="detail-section" id="detailPartner"></div>
         <div class="detail-section" id="detailParents"></div>
         <div class="detail-section" id="detailChildren"></div>
         <div class="detail-section">
@@ -175,6 +186,7 @@
         </div>
         <div class="detail-actions">
           <button class="btn-hide" id="btnHideChildren" onclick="toggleHideChildren()">Hide Children</button>
+          <button class="btn-partner" id="btnPartner" onclick="enterPartnerMode()">Select Partner</button>
           <button class="btn-parent" onclick="enterParentMode()">Select Parent</button>
           <button class="btn-delete" onclick="deleteFromDetail()">Delete</button>
           <button class="btn-close" onclick="saveAndCloseDetail()">Close</button>
@@ -197,6 +209,7 @@
     let people = {};
     let selectedPersonId = null;
     let parentMode = null;
+    let partnerMode = null;
     let bloodlineMode = false;   // true when selecting or filtering
     let bloodlinePersonId = null; // person whose bloodline is shown
     let hiddenChildrenSet = new Set();
@@ -334,6 +347,9 @@
         { selector: 'edge[etype="couple"]', style: {
           'width': 2, 'line-color': '#e74c3c', 'curve-style': 'straight',
         }},
+        { selector: 'edge[etype="partner"]', style: {
+          'width': 2, 'line-color': '#e74c3c', 'line-style': 'dashed', 'curve-style': 'straight',
+        }},
         { selector: 'edge[etype="child"]', style: {
           'width': 2, 'line-color': '#999', 'curve-style': 'straight',
         }},
@@ -352,6 +368,8 @@
       const id = evt.target.id();
       if (parentMode) {
         assignParent(id);
+      } else if (partnerMode) {
+        assignPartner(id);
       } else if (bloodlineMode && !bloodlinePersonId) {
         applyBloodlineFilter(id);
       } else {
@@ -361,6 +379,7 @@
     cy.on('tap', function(evt) {
       if (evt.target === cy) {
         if (parentMode) exitParentMode();
+        if (partnerMode) exitPartnerMode();
         closeDetail();
       }
     });
@@ -484,6 +503,7 @@
             cy.add({ data: { id: cid, type: 'couple' } });
             cy.add({ data: { id: cid + '-a', source: p.parent1, target: cid, etype: 'couple' } });
             cy.add({ data: { id: cid + '-b', source: p.parent2, target: cid, etype: 'couple' } });
+            cy.add({ data: { id: 'partner-' + coupleKey, source: p.parent1, target: p.parent2, etype: 'partner' } });
           }
           cy.add({ data: { id: id + '-child', source: coupleMap[coupleKey], target: id, etype: 'child' } });
         } else if (visibleP1) {
@@ -491,6 +511,23 @@
         } else if (visibleP2) {
           cy.add({ data: { id: id + '-p2', source: p.parent2, target: id, etype: 'child' } });
         }
+      }
+
+      // Draw partner edges from the partner field (for couples without shared children)
+      const partnerEdges = new Set();
+      for (const id in people) {
+        if (bloodSet && !bloodSet.has(id)) continue;
+        if (hideSet.has(id)) continue;
+        const p = people[id];
+        if (!p.partner || !people[p.partner]) continue;
+        if (bloodSet && !bloodSet.has(p.partner)) continue;
+        if (hideSet.has(p.partner)) continue;
+        const pairKey = [id, p.partner].sort().join('-');
+        if (partnerEdges.has(pairKey)) continue;
+        // Skip if already drawn via couple map
+        if (coupleMap[pairKey]) continue;
+        partnerEdges.add(pairKey);
+        cy.add({ data: { id: 'partner-' + pairKey, source: id, target: p.partner, etype: 'partner' } });
       }
 
       runLayout();
@@ -546,6 +583,16 @@
       } else {
         placeholder.style.display = '';
         photoBtn.textContent = 'Add Photo';
+      }
+
+      const partnerDiv = document.getElementById('detailPartner');
+      const btnPartner = document.getElementById('btnPartner');
+      if (person.partner && people[person.partner]) {
+        partnerDiv.innerHTML = '<label>Partner</label><p><span class="parent-link" onclick="saveAndOpenDetail(\'' + person.partner + '\')">' + escHtml(people[person.partner].name) + '</span></p>';
+        btnPartner.textContent = 'Remove Partner';
+      } else {
+        partnerDiv.innerHTML = '';
+        btnPartner.textContent = 'Select Partner';
       }
 
       const parentsDiv = document.getElementById('detailParents');
@@ -662,6 +709,7 @@
       for (const pid in people) {
         if (people[pid].parent1 === id) people[pid].parent1 = null;
         if (people[pid].parent2 === id) people[pid].parent2 = null;
+        if (people[pid].partner === id) people[pid].partner = null;
       }
       delete people[id];
       hiddenChildrenSet.delete(id);
@@ -733,6 +781,86 @@
       });
     }
 
+    // ── Select Partner Mode ──
+    function enterPartnerMode() {
+      if (!selectedPersonId) return;
+      const person = people[selectedPersonId];
+      // If already has a partner, remove it instead
+      if (person.partner) {
+        removePartner();
+        return;
+      }
+      partnerMode = { personId: selectedPersonId };
+      closeDetail();
+      document.getElementById('partner-banner').classList.add('open');
+      cy.getElementById(selectedPersonId).addClass('highlighted');
+    }
+
+    function exitPartnerMode() {
+      if (partnerMode) {
+        cy.getElementById(partnerMode.personId).removeClass('highlighted');
+      }
+      partnerMode = null;
+      document.getElementById('partner-banner').classList.remove('open');
+    }
+
+    async function assignPartner(targetId) {
+      if (!partnerMode) return;
+      const personId = partnerMode.personId;
+      if (targetId === personId) return;
+      const person = people[personId];
+      const target = people[targetId];
+      if (!person || !target) { exitPartnerMode(); return; }
+      if (target.partner) {
+        alert(target.name + ' already has a partner.');
+        return;
+      }
+
+      person.partner = targetId;
+      target.partner = personId;
+
+      exitPartnerMode();
+      rebuildGraph();
+      await Promise.all([
+        fetch('/api/trees/' + currentTreeId + '/people/' + personId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ partner: targetId })
+        }),
+        fetch('/api/trees/' + currentTreeId + '/people/' + targetId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ partner: personId })
+        })
+      ]);
+    }
+
+    async function removePartner() {
+      const id = selectedPersonId;
+      const person = people[id];
+      if (!person || !person.partner) return;
+      const partnerId = person.partner;
+      const partner = people[partnerId];
+
+      person.partner = null;
+      if (partner) partner.partner = null;
+
+      closeDetail();
+      rebuildGraph();
+      await Promise.all([
+        fetch('/api/trees/' + currentTreeId + '/people/' + id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ partner: null })
+        }),
+        partner ? fetch('/api/trees/' + currentTreeId + '/people/' + partnerId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ partner: null })
+        }) : Promise.resolve()
+      ]);
+    }
+
     // ── Bloodline filter mode ──
     function toggleBloodlineMode() {
       if (bloodlineMode) {
@@ -786,6 +914,9 @@
           if (selectedPersonId === msg.person.id) openDetail(msg.person.id);
         } else if (msg.type === 'person:deleted') {
           delete people[msg.id];
+          for (const pid in people) {
+            if (people[pid].partner === msg.id) people[pid].partner = null;
+          }
           msg.affectedChildren.forEach(function(cid) {
             if (people[cid]) {
               if (people[cid].parent1 === msg.id) people[cid].parent1 = null;

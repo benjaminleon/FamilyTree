@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS people (
   name       TEXT NOT NULL DEFAULT 'Unnamed',
   parent1    TEXT,
   parent2    TEXT,
+  partner    TEXT,
   birth_year TEXT DEFAULT '',
   notes      TEXT DEFAULT '',
   photo      TEXT,

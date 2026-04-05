@@ -41,6 +41,7 @@ function rowToPerson(row) {
     name: row.name,
     parent1: row.parent1,
     parent2: row.parent2,
+    partner: row.partner,
     birthYear: row.birth_year,
     notes: row.notes,
     photo: row.photo,
@@ -138,7 +139,7 @@ app.post('/api/trees/:treeId/people', async (req, res) => {
       'INSERT INTO people (id, tree_id, name) VALUES ($1, $2, $3)',
       [id, treeId, name || 'Unnamed']
     );
-    const person = { id, name: name || 'Unnamed', parent1: null, parent2: null, birthYear: '', notes: '', photo: null };
+    const person = { id, name: name || 'Unnamed', parent1: null, parent2: null, partner: null, birthYear: '', notes: '', photo: null };
     broadcast(treeId, { type: 'person:created', person });
     res.json(person);
   } catch (e) {
@@ -154,7 +155,7 @@ app.put('/api/trees/:treeId/people/:id', async (req, res) => {
     const vals = [];
     let i = 1;
 
-    const fieldMap = { name: 'name', birthYear: 'birth_year', notes: 'notes', photo: 'photo', parent1: 'parent1', parent2: 'parent2' };
+    const fieldMap = { name: 'name', birthYear: 'birth_year', notes: 'notes', photo: 'photo', parent1: 'parent1', parent2: 'parent2', partner: 'partner' };
     for (const [jsKey, dbCol] of Object.entries(fieldMap)) {
       if (jsKey in fields) {
         sets.push(`${dbCol} = $${i++}`);
@@ -184,9 +185,10 @@ app.delete('/api/trees/:treeId/people/:id', async (req, res) => {
     );
     const affectedChildren = childrenRes.rows.map(r => r.id);
 
-    // Manually nullify parent refs since we have composite keys
+    // Manually nullify parent/partner refs since we have composite keys
     await pool.query('UPDATE people SET parent1 = NULL WHERE tree_id = $1 AND parent1 = $2', [treeId, id]);
     await pool.query('UPDATE people SET parent2 = NULL WHERE tree_id = $1 AND parent2 = $2', [treeId, id]);
+    await pool.query('UPDATE people SET partner = NULL WHERE tree_id = $1 AND partner = $2', [treeId, id]);
     await pool.query('DELETE FROM people WHERE tree_id = $1 AND id = $2', [treeId, id]);
 
     broadcast(treeId, { type: 'person:deleted', id, affectedChildren });
@@ -203,7 +205,9 @@ app.get('/tree/:code', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-waitForDb().then(() => {
+waitForDb().then(async () => {
+  // Migration: add partner column if missing
+  await pool.query(`ALTER TABLE people ADD COLUMN IF NOT EXISTS partner TEXT`).catch(e => console.error('Migration failed:', e.message));
   server.listen(PORT, '0.0.0.0', () => console.log(`Server running on 0.0.0.0:${PORT}`));
 }).catch(e => {
   console.error(e.message);
