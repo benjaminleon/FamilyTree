@@ -391,8 +391,59 @@
         rankDir: 'TB',
         nodeSep: 50,
         rankSep: 80,
-        animate: true,
-        animationDuration: 300,
+        animate: false,
+        stop: function () {
+          // Group person nodes by generation and compute average Y per generation
+          var genNodes = {};
+          cy.nodes('[type="person"]').forEach(function (n) {
+            var g = n.data('gen');
+            if (g === undefined) return;
+            if (!genNodes[g]) genNodes[g] = { nodes: [], totalY: 0 };
+            genNodes[g].nodes.push(n);
+            genNodes[g].totalY += n.position('y');
+          });
+
+          // Align Y, group partners adjacently, resolve overlaps
+          var minGap = 20;
+          for (var g in genNodes) {
+            var avgY = genNodes[g].totalY / genNodes[g].nodes.length;
+            var sorted = genNodes[g].nodes.sort(function (a, b) { return a.position('x') - b.position('x'); });
+
+            // Build ordering with partners adjacent
+            var placed = new Set();
+            var ordered = [];
+            for (var i = 0; i < sorted.length; i++) {
+              if (placed.has(sorted[i].id())) continue;
+              ordered.push(sorted[i]);
+              placed.add(sorted[i].id());
+              var pid = people[sorted[i].id()] && people[sorted[i].id()].partner;
+              if (pid && !placed.has(pid)) {
+                var pn = cy.getElementById(pid);
+                if (pn.length && pn.data('gen') == g) { ordered.push(pn); placed.add(pid); }
+              }
+            }
+
+            // Apply Y alignment and resolve X overlaps
+            for (var i = 0; i < ordered.length; i++) {
+              ordered[i].position('y', avgY);
+              if (i > 0) {
+                var needed = (ordered[i - 1].outerWidth() + ordered[i].outerWidth()) / 2 + minGap;
+                var minX = ordered[i - 1].position('x') + needed;
+                if (ordered[i].position('x') < minX) ordered[i].position('x', minX);
+              }
+            }
+          }
+
+          // Reposition couple junction nodes between parents and children
+          cy.nodes('[type="couple"]').forEach(function (cn) {
+            var parents = cn.connectedEdges('[etype="couple"]').sources().not(cn);
+            var children = cn.connectedEdges('[etype="child"]').targets();
+            var pY = parents.reduce(function (s, n) { return s + n.position('y'); }, 0) / (parents.length || 1);
+            var cY = children.length ? children.reduce(function (s, n) { return s + n.position('y'); }, 0) / children.length : pY + 40;
+            cn.position('y', (pY + cY) / 2);
+            if (parents.length === 2) cn.position('x', (parents[0].position('x') + parents[1].position('x')) / 2);
+          });
+        },
       }).run();
     }
 
@@ -412,6 +463,15 @@
         return parentGen;
       }
       for (const id in people) getGen(id);
+
+      // Align married-in spouses (no parents) to their partner's generation
+      for (const id in people) {
+        const p = people[id];
+        if (p.parent1 || p.parent2) continue;
+        const partnerId = p.partner;
+        if (partnerId && gen[partnerId] !== undefined) gen[id] = gen[partnerId];
+      }
+
       const vals = Object.values(gen);
       if (vals.length === 0) return gen;
       const minGen = Math.min(...vals.filter(v => v >= 0));
@@ -477,7 +537,7 @@
         const p = people[id];
         const g = gens[id] || 0;
         const label = p.birthYear ? p.name + '\n' + p.birthYear : p.name;
-        const nodeData = { id, label, type: 'person', color: hiddenChildrenSet.has(id) ? '#bdc3c7' : GEN_COLORS[g % GEN_COLORS.length] };
+        const nodeData = { id, label, type: 'person', gen: g, color: hiddenChildrenSet.has(id) ? '#bdc3c7' : GEN_COLORS[g % GEN_COLORS.length] };
         if (p.photo) {
           nodeData.photo = p.photo;
           nodeData.hasPhoto = true;
