@@ -23,6 +23,7 @@ services:
     volumes:
       - ./server.js:/app/server.js
       - ./index.html:/app/index.html
+      - ./layout.js:/app/layout.js
     command: npx nodemon server.js
 
 volumes:
