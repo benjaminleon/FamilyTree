@@ -80,7 +80,9 @@ function getJSON(path) {
   await sleep(wait);
 
   if (expr) {
-    const r = await send('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true });
+    const r = await send('Runtime.evaluate', {
+      expression: expr, returnByValue: true, awaitPromise: true, replMode: true, userGesture: true,
+    });
     if (r.exceptionDetails) console.log('EVAL ERROR:', r.exceptionDetails.text, r.exceptionDetails.exception && r.exceptionDetails.exception.description);
     else console.log(typeof r.result.value === 'object' ? JSON.stringify(r.result.value, null, 2) : String(r.result.value));
   }

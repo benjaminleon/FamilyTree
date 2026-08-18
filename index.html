@@ -54,6 +54,9 @@
     .detail-body .detail-section p { margin-top: 2px; font-size: 14px; color: #333; }
     .detail-body .detail-section .parent-link { color: #4a90d9; cursor: pointer; }
     .detail-body .detail-section .parent-link:hover { text-decoration: underline; }
+    .detail-body .detail-section .rel-chip { display: inline-flex; align-items: center; gap: 2px; background: #f1f5f9; border-radius: 13px; padding: 3px 3px 3px 10px; margin: 4px 4px 0 0; }
+    .detail-body .detail-section .rel-remove { border: none; background: none; color: #9aa5b1; cursor: pointer; font-size: 16px; line-height: 1; width: 20px; height: 20px; border-radius: 10px; padding: 0; }
+    .detail-body .detail-section .rel-remove:hover { background: #e74c3c; color: #fff; }
     .detail-actions { display: flex; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
     .detail-actions button { padding: 8px 14px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; }
     .detail-actions .btn-parent { background: #2ecc71; color: #fff; }
@@ -186,7 +189,7 @@
         <div class="detail-actions">
           <button class="btn-hide" id="btnHideChildren" onclick="toggleHideChildren()">Hide Children</button>
           <button class="btn-partner" id="btnPartner" onclick="enterPartnerMode()">Select Partner</button>
-          <button class="btn-parent" onclick="enterParentMode()">Select Parent</button>
+          <button class="btn-parent" onclick="enterParentMode()">Add Parent</button>
           <button class="btn-delete" onclick="deleteFromDetail()">Delete</button>
           <button class="btn-close" onclick="saveAndCloseDetail()">Close</button>
         </div>
@@ -609,10 +612,11 @@
       const partnerDiv = document.getElementById('detailPartner');
       const btnPartner = document.getElementById('btnPartner');
       if (person.partner && people[person.partner]) {
-        partnerDiv.innerHTML = '<label>Partner</label><p><span class="parent-link" onclick="saveAndOpenDetail(\'' + person.partner + '\')">' + escHtml(people[person.partner].name) + '</span></p>';
-        btnPartner.textContent = 'Remove Partner';
+        partnerDiv.innerHTML = '<label>Partner</label><p>' +
+          relChip(person.partner, people[person.partner].name, 'removePartner()', 'Remove partner') + '</p>';
+        btnPartner.textContent = 'Change Partner';
       } else {
-        partnerDiv.innerHTML = '';
+        partnerDiv.innerHTML = '<label>Partner</label><p style="color:#999">None set</p>';
         btnPartner.textContent = 'Select Partner';
       }
 
@@ -622,7 +626,7 @@
       if (person.parent2 && people[person.parent2]) parentNames.push({ id: person.parent2, name: people[person.parent2].name });
       if (parentNames.length) {
         parentsDiv.innerHTML = '<label>Parents</label><p>' +
-          parentNames.map(p => '<span class="parent-link" onclick="saveAndOpenDetail(\'' + p.id + '\')">' + escHtml(p.name) + '</span>').join(', ') + '</p>';
+          parentNames.map(p => relChip(p.id, p.name, "removeParentLink('" + id + "','" + p.id + "')", 'Remove parent')).join('') + '</p>';
       } else {
         parentsDiv.innerHTML = '<label>Parents</label><p style="color:#999">None set</p>';
       }
@@ -631,7 +635,7 @@
       const children = Object.values(people).filter(p => p.parent1 === id || p.parent2 === id);
       if (children.length) {
         childrenDiv.innerHTML = '<label>Children</label><p>' +
-          children.map(c => '<span class="parent-link" onclick="saveAndOpenDetail(\'' + c.id + '\')">' + escHtml(c.name) + '</span>').join(', ') + '</p>';
+          children.map(c => relChip(c.id, c.name, "removeParentLink('" + c.id + "','" + id + "')", 'Remove this parent link')).join('') + '</p>';
       } else {
         childrenDiv.innerHTML = '';
       }
@@ -681,6 +685,14 @@
     function closeDetail() {
       document.getElementById('detail-overlay').classList.remove('open');
       selectedPersonId = null;
+    }
+
+    // A related person: tap the name to walk there, tap the × to break the link.
+    function relChip(personId, name, removeCall, title) {
+      return '<span class="rel-chip">' +
+        '<span class="parent-link" onclick="saveAndOpenDetail(\'' + personId + '\')">' + escHtml(name) + '</span>' +
+        '<button class="rel-remove" title="' + title + '" onclick="' + removeCall + '">&times;</button>' +
+        '</span>';
     }
 
     function escHtml(s) {
@@ -759,7 +771,7 @@
       if (!selectedPersonId) return;
       const person = people[selectedPersonId];
       if (person.parent1 && person.parent2) {
-        alert(person.name + ' already has two parents. Remove one first.');
+        alert(person.name + ' already has two parents. Remove one with the \u00d7 beside their name first.');
         return;
       }
       parentMode = { childId: selectedPersonId };
@@ -802,19 +814,37 @@
       });
     }
 
+    // Breaking a parent/child link is the same edit seen from either end, so
+    // the chips in both the Parents and the Children list come through here.
+    async function removeParentLink(childId, parentId) {
+      await saveCurrentEdits();
+      const child = people[childId];
+      if (!child) return;
+
+      const update = {};
+      if (child.parent1 === parentId) { child.parent1 = null; update.parent1 = null; }
+      else if (child.parent2 === parentId) { child.parent2 = null; update.parent2 = null; }
+      else return;
+
+      rebuildGraph();
+      if (selectedPersonId) openDetail(selectedPersonId);
+      await fetch('/api/trees/' + currentTreeId + '/people/' + childId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(update)
+      });
+    }
+
     // ── Select Partner Mode ──
     function enterPartnerMode() {
-      if (!selectedPersonId) return;
-      const person = people[selectedPersonId];
-      // If already has a partner, remove it instead
-      if (person.partner) {
-        removePartner();
-        return;
-      }
-      partnerMode = { personId: selectedPersonId };
+      const id = selectedPersonId;
+      if (!id) return;
+      // "Change Partner" leaves the current one in place until a new one is
+      // actually picked, so backing out costs nothing
+      partnerMode = { personId: id };
       closeDetail();
       document.getElementById('partner-banner').classList.add('open');
-      cy.getElementById(selectedPersonId).addClass('highlighted');
+      cy.getElementById(id).addClass('highlighted');
     }
 
     function exitPartnerMode() {
@@ -832,15 +862,19 @@
       const person = people[personId];
       const target = people[targetId];
       if (!person || !target) { exitPartnerMode(); return; }
-      if (target.partner) {
-        alert(target.name + ' already has a partner.');
+      if (target.partner && target.partner !== personId) {
+        alert(target.name + ' already has a partner. Remove it from their card first.');
         return;
       }
 
+      exitPartnerMode();
+      // swapping partners: let go of the previous one first
+      if (person.partner && person.partner !== targetId) {
+        await removePartnerLink(personId, { redraw: false });
+      }
       person.partner = targetId;
       target.partner = personId;
 
-      exitPartnerMode();
       rebuildGraph();
       await Promise.all([
         fetch('/api/trees/' + currentTreeId + '/people/' + personId, {
@@ -857,7 +891,11 @@
     }
 
     async function removePartner() {
-      const id = selectedPersonId;
+      await saveCurrentEdits();
+      await removePartnerLink(selectedPersonId);
+    }
+
+    async function removePartnerLink(id, opts) {
       const person = people[id];
       if (!person || !person.partner) return;
       const partnerId = person.partner;
@@ -866,8 +904,10 @@
       person.partner = null;
       if (partner) partner.partner = null;
 
-      closeDetail();
-      rebuildGraph();
+      if (!opts || opts.redraw !== false) {
+        rebuildGraph();
+        if (selectedPersonId) openDetail(selectedPersonId);
+      }
       await Promise.all([
         fetch('/api/trees/' + currentTreeId + '/people/' + id, {
           method: 'PUT',
