@@ -126,24 +126,101 @@ app.get('/api/trees/:treeId/people', async (req, res) => {
   }
 });
 
+// A refusal that still needs the transaction unwound, so it travels as an
+// error rather than an early return.
+function reject(status, message) {
+  const e = new Error(message);
+  e.status = status;
+  return e;
+}
+
+// Create a person, optionally wired into the tree in the same request.
+// `attach` is { relation, anchorId, withPartner } where relation is one of
+// child | parent | partner | sibling, described from the new person's side.
+// Doing it here rather than as a follow-up PUT means a new relative is never
+// briefly visible as a stray unconnected node, and one broadcast carries it.
 app.post('/api/trees/:treeId/people', async (req, res) => {
+  const client = await pool.connect();
   try {
     const { treeId } = req.params;
-    const { name } = req.body;
-    const metaRes = await pool.query(
+    const { name, birthYear, attach } = req.body;
+
+    const rel = attach && attach.relation;
+    if (rel && ['child', 'parent', 'partner', 'sibling'].indexOf(rel) === -1) {
+      return res.status(400).json({ error: 'Unknown relation: ' + rel });
+    }
+
+    await client.query('BEGIN');
+
+    // Two people on two phones can be filling in the same relative at once,
+    // so the anchor is read and held inside the transaction — checking first
+    // and writing afterwards would let both pass the same guard.
+    let anchor = null;
+    if (rel) {
+      const a = await client.query(
+        'SELECT * FROM people WHERE tree_id = $1 AND id = $2 FOR UPDATE', [treeId, attach.anchorId]);
+      if (!a.rows.length) throw reject(404, 'That person is no longer in the tree.');
+      anchor = rowToPerson(a.rows[0]);
+      if (rel === 'partner' && anchor.partner) {
+        throw reject(409, anchor.name + ' already has a partner. Remove it first.');
+      }
+      if (rel === 'parent' && anchor.parent1 && anchor.parent2) {
+        throw reject(409, anchor.name + ' already has two parents. Remove one first.');
+      }
+      if (rel === 'sibling' && !anchor.parent1 && !anchor.parent2) {
+        throw reject(400, 'Give ' + anchor.name + ' a parent first — a sibling is someone who shares them.');
+      }
+    }
+
+    let parent1 = null, parent2 = null, partner = null;
+    if (rel === 'child') {
+      parent1 = anchor.id;
+      if (attach.withPartner && anchor.partner) parent2 = anchor.partner;
+    } else if (rel === 'sibling') {
+      parent1 = anchor.parent1;
+      parent2 = anchor.parent2;
+    } else if (rel === 'partner') {
+      partner = anchor.id;
+    }
+
+    const metaRes = await client.query(
       "UPDATE meta SET value = (value::int + 1)::text WHERE tree_id = $1 AND key = 'nextId' RETURNING value",
       [treeId]
     );
     const id = 'p' + (parseInt(metaRes.rows[0].value, 10) - 1);
-    await pool.query(
-      'INSERT INTO people (id, tree_id, name) VALUES ($1, $2, $3)',
-      [id, treeId, name || 'Unnamed']
+    await client.query(
+      `INSERT INTO people (id, tree_id, name, birth_year, parent1, parent2, partner)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [id, treeId, name || 'Unnamed', birthYear || '', parent1, parent2, partner]
     );
-    const person = { id, name: name || 'Unnamed', parent1: null, parent2: null, partner: null, birthYear: '', notes: '', photo: null };
+
+    // The other half of a two-sided link lives on the anchor.
+    let anchorCol = null;
+    if (rel === 'partner') anchorCol = 'partner';
+    else if (rel === 'parent') anchorCol = anchor.parent1 ? 'parent2' : 'parent1';
+    if (anchorCol) {
+      await client.query(
+        `UPDATE people SET ${anchorCol} = $1 WHERE tree_id = $2 AND id = $3`,
+        [id, treeId, anchor.id]
+      );
+    }
+    await client.query('COMMIT');
+
+    const person = { id, name: name || 'Unnamed', parent1, parent2, partner, birthYear: birthYear || '', notes: '', photo: null };
     broadcast(treeId, { type: 'person:created', person });
-    res.json(person);
+
+    let updatedAnchor = null;
+    if (anchorCol) {
+      const row = await client.query('SELECT * FROM people WHERE tree_id = $1 AND id = $2', [treeId, anchor.id]);
+      updatedAnchor = rowToPerson(row.rows[0]);
+      broadcast(treeId, { type: 'person:updated', person: updatedAnchor });
+    }
+    res.json({ person, anchor: updatedAnchor });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    await client.query('ROLLBACK').catch(function () {});
+    res.status(e.status || 500).json({ error: e.message });
+  } finally {
+    client.release();
   }
 });
 

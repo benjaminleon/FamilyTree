@@ -27,7 +27,8 @@
 
     /* Toolbar */
     #toolbar { position: fixed; top: 0; left: 0; right: 0; height: 48px; background: #fff; border-bottom: 1px solid #ddd; display: flex; align-items: center; padding: 0 16px; z-index: 10; gap: 8px; }
-    #toolbar button { padding: 8px 16px; background: #4a90d9; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
+    #toolbar button { padding: 8px 16px; background: #4a90d9; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; white-space: nowrap; }
+    .lbl-short { display: none; }
     #toolbar button:hover { background: #3a7bc8; }
     #toolbar .spacer { flex: 1; }
     #toolbar .tree-code { font-size: 13px; color: #666; margin-right: 8px; }
@@ -68,26 +69,10 @@
     .detail-body input, .detail-body textarea { width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; margin-top: 2px; }
     .detail-body textarea { resize: vertical; height: 60px; }
 
-    /* Modal overlay for Add Person */
-    #modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; justify-content: center; align-items: center; }
-    #modal-overlay.open { display: flex; }
-    #modal { background: #fff; border-radius: 10px; padding: 24px; width: 320px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
-    #modal h3 { margin-bottom: 16px; }
-    #modal input { width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 15px; margin-bottom: 16px; }
-    #modal .btn-row { display: flex; gap: 8px; }
-    #modal .btn-row button { flex: 1; padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
-    #modal .btn-primary { background: #4a90d9; color: #fff; }
-    #modal .btn-cancel { background: #eee; color: #333; }
-
-    /* Select-parent mode banner */
+    /* Banner shown while picking someone straight off the graph */
     #parent-banner { display: none; position: fixed; top: 48px; left: 0; right: 0; height: 40px; background: #2ecc71; color: #fff; z-index: 20; text-align: center; line-height: 40px; font-size: 14px; }
     #parent-banner.open { display: block; }
     #parent-banner button { margin-left: 12px; padding: 4px 12px; background: rgba(255,255,255,0.3); color: #fff; border: 1px solid rgba(255,255,255,0.5); border-radius: 4px; cursor: pointer; font-size: 13px; }
-
-    /* Select-partner mode banner */
-    #partner-banner { display: none; position: fixed; top: 48px; left: 0; right: 0; height: 40px; background: #e74c3c; color: #fff; z-index: 20; text-align: center; line-height: 40px; font-size: 14px; }
-    #partner-banner.open { display: block; }
-    #partner-banner button { margin-left: 12px; padding: 4px 12px; background: rgba(255,255,255,0.3); color: #fff; border: 1px solid rgba(255,255,255,0.5); border-radius: 4px; cursor: pointer; font-size: 13px; }
 
     /* Bloodline banner */
     #bloodline-banner { display: none; position: fixed; top: 48px; left: 0; right: 0; height: 40px; background: #3498db; color: #fff; z-index: 20; text-align: center; line-height: 40px; font-size: 14px; }
@@ -96,19 +81,69 @@
 
     .photo-file-input { display: none; }
 
+    /* ── Bottom sheets ──
+       Anchored to the bottom edge, where a thumb actually reaches on a phone;
+       a centred card once there is room for one. */
+    .sheet-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 120; align-items: flex-end; justify-content: center; }
+    .sheet-overlay.open { display: flex; }
+    .sheet { background: #fff; width: 100%; max-width: 440px; border-radius: 18px 18px 0 0; padding: 6px 20px calc(20px + env(safe-area-inset-bottom)); max-height: 88vh; overflow-y: auto; box-shadow: 0 -4px 32px rgba(0,0,0,0.2); }
+    .sheet-grab { width: 36px; height: 4px; background: #d5d9de; border-radius: 2px; margin: 6px auto 14px; }
+    .sheet h3 { font-size: 19px; margin-bottom: 3px; }
+    .sheet .sheet-sub { color: #6b7280; font-size: 14px; line-height: 1.4; }
+    .sheet .sheet-sub strong { color: #2c3e50; }
+    .sheet-label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #9aa5b1; margin: 16px 0 5px; }
+    .sheet-label .opt { text-transform: none; letter-spacing: 0; color: #c2c9d1; }
+    /* 16px keeps iOS from zooming the viewport when a field takes focus */
+    .sheet input[type=text], .sheet input[type=search] { width: 100%; padding: 13px 14px; border: 1px solid #d5d9de; border-radius: 10px; font-size: 16px; background: #fff; -webkit-appearance: none; }
+    .sheet input:focus { outline: none; border-color: #4a90d9; }
+    .sheet-btns { display: flex; gap: 10px; margin-top: 20px; }
+    .sheet-btns button { flex: 1; padding: 15px; border: none; border-radius: 10px; font-size: 16px; cursor: pointer; }
+    .sheet-btns .btn-primary { background: #4a90d9; color: #fff; font-weight: 500; }
+    .sheet-btns .btn-primary:disabled { background: #c9d6e3; cursor: default; }
+    .sheet-btns .btn-cancel { background: #eef1f4; color: #33404d; }
+    .sheet-switch { display: block; width: 100%; margin-top: 14px; padding: 12px; background: none; border: none; color: #4a90d9; font-size: 15px; cursor: pointer; }
+    .sheet-error { display: none; margin-top: 14px; padding: 11px 13px; background: #fdecea; color: #b93d31; border-radius: 9px; font-size: 14px; line-height: 1.4; }
+    .sheet-error.show { display: block; }
+    .rel-clear { float: right; border: none; background: none; color: #7d94a8; font-size: 19px; line-height: 1; cursor: pointer; padding: 0 2px; }
+    .rel-clear:hover { color: #b93d31; }
+    .sheet-note { margin-top: 14px; padding: 11px 13px; background: #f1f6fb; color: #3d5a73; border-radius: 9px; font-size: 14px; line-height: 1.4; }
+    .sheet-check { display: flex; align-items: center; gap: 11px; margin-top: 16px; padding: 13px; background: #f7fafc; border: 1px solid #e4eaf0; border-radius: 10px; cursor: pointer; font-size: 15px; }
+    .sheet-check input { width: 20px; height: 20px; accent-color: #4a90d9; flex-shrink: 0; }
+
+    /* Relative shortcuts on the detail card */
+    .rel-add-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 5px; }
+    .rel-add-grid button { padding: 13px 8px; border: 1px solid #dbe3ea; background: #f7fafc; border-radius: 10px; font-size: 14px; cursor: pointer; color: #2c3e50; }
+    .rel-add-grid button:hover:not(:disabled) { background: #eaf2fa; border-color: #a9c8e5; }
+    .rel-add-grid button:disabled { color: #b8c1cb; background: #fafbfc; cursor: default; }
+
+    /* Searchable person list */
+    #relList { margin-top: 12px; max-height: 44vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    .pick-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 11px 6px; border: none; border-bottom: 1px solid #f0f2f5; background: none; cursor: pointer; text-align: left; font-size: 15px; color: #2c3e50; }
+    .pick-row:hover { background: #f7fafc; }
+    .pick-avatar { width: 38px; height: 38px; border-radius: 19px; background: #e6eaee; flex-shrink: 0; object-fit: cover; display: flex; align-items: center; justify-content: center; color: #96a1ac; font-size: 15px; }
+    .pick-name { flex: 1; min-width: 0; }
+    .pick-name span { display: block; color: #9aa5b1; font-size: 13px; }
+    .pick-empty { padding: 26px 6px; text-align: center; color: #9aa5b1; font-size: 14px; }
+
+    @media (min-width: 560px) {
+      .sheet-overlay { align-items: center; }
+      .sheet { border-radius: 14px; max-height: 84vh; padding-bottom: 20px; }
+    }
+
     /* Mobile */
     @media (max-width: 480px) {
       .landing-card { width: calc(100% - 32px); padding: 24px; }
-      #toolbar { padding: 0 8px; gap: 4px; }
-      #toolbar button { padding: 6px 10px; font-size: 13px; }
-      #toolbar .tree-code { font-size: 11px; margin-right: 4px; }
-      #toolbar .btn-small { padding: 4px 8px; font-size: 11px; }
+      #toolbar { padding: 0 8px; gap: 5px; }
+      #toolbar button { padding: 7px 9px; font-size: 13px; }
+      #toolbar .tree-code { font-size: 12px; margin-right: 2px; }
+      #toolbar .btn-small { padding: 6px 9px; font-size: 12px; }
+      .lbl-full { display: none; }
+      .lbl-short { display: inline; }
       #detail-overlay { top: 0; align-items: stretch; }
       #detail-card { width: 100%; max-height: 100vh; border-radius: 0; }
       .detail-photo { height: 160px; border-radius: 0; }
       .detail-body { padding: 16px; }
       .detail-body textarea { height: 48px; }
-      #modal { width: calc(100% - 32px); }
     }
   </style>
 </head>
@@ -128,19 +163,16 @@
 
   <!-- App -->
   <div id="toolbar">
-    <button onclick="openAddModal()">Add Person</button>
-    <button id="bloodlineBtn" onclick="toggleBloodlineMode()">Show Bloodline</button>
+    <button onclick="openAddSheet()"><span class="lbl-full">Add Person</span><span class="lbl-short">+ Add</span></button>
+    <button id="bloodlineBtn" onclick="toggleBloodlineMode()"><span class="lbl-full">Show Bloodline</span><span class="lbl-short">Bloodline</span></button>
     <div class="spacer"></div>
-    <div class="tree-code">Code: <span id="treeCodeDisplay" onclick="copyCode()"></span></div>
-    <button class="btn-small" onclick="switchTree()">Switch Tree</button>
+    <div class="tree-code"><span class="lbl-full">Code: </span><span id="treeCodeDisplay" onclick="copyCode()"></span></div>
+    <button class="btn-small" onclick="switchTree()"><span class="lbl-full">Switch Tree</span><span class="lbl-short">Switch</span></button>
   </div>
 
   <div id="parent-banner">
-    Click a person to set as parent. <button onclick="exitParentMode()">Cancel</button>
-  </div>
-
-  <div id="partner-banner">
-    Click a person to set as partner. <button onclick="exitPartnerMode()">Cancel</button>
+    <span id="graphPickText">Tap someone in the tree.</span>
+    <button onclick="exitGraphPick()">Cancel</button>
   </div>
 
   <div id="bloodline-banner">
@@ -150,14 +182,37 @@
 
   <div id="cy"></div>
 
-  <!-- Add Person Modal -->
-  <div id="modal-overlay" onclick="if(event.target===this)closeModal()">
-    <div id="modal">
-      <h3>Add Person</h3>
-      <input type="text" id="modalName" placeholder="Name" autofocus>
-      <div class="btn-row">
-        <button class="btn-primary" onclick="confirmAdd()">Add</button>
-        <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+  <!-- Add / link a relative. One sheet, because from the user's side
+       "who is her mother?" is the same thought whether that mother is
+       already in the tree or not. -->
+  <div id="rel-overlay" class="sheet-overlay" onclick="if(event.target===this)closeRelSheet()">
+    <div class="sheet">
+      <div class="sheet-grab"></div>
+      <h3 id="relTitle">Add person</h3>
+      <p class="sheet-sub" id="relSub"></p>
+
+      <div id="relCreate">
+        <label class="sheet-label" for="relName">Name</label>
+        <input type="text" id="relName" placeholder="Full name" autocomplete="off" autocapitalize="words">
+        <label class="sheet-label" for="relYear">Birth year <span class="opt">— optional</span></label>
+        <input type="text" id="relYear" inputmode="numeric" placeholder="e.g. 1962" maxlength="4" autocomplete="off">
+        <div id="relExtra"></div>
+        <div class="sheet-error" id="relError"></div>
+        <div class="sheet-btns">
+          <button class="btn-cancel" onclick="closeRelSheet()">Cancel</button>
+          <button class="btn-primary" id="relAddBtn" onclick="confirmRelAdd()">Add</button>
+        </div>
+        <button class="sheet-switch" id="relSwitchBtn" onclick="showRelPicker()">Choose someone already in the tree</button>
+      </div>
+
+      <div id="relPick" style="display:none">
+        <input type="search" id="relSearch" placeholder="Search by name" autocomplete="off" oninput="renderRelPicker()">
+        <div id="relList"></div>
+        <div class="sheet-error" id="relPickError"></div>
+        <div class="sheet-btns">
+          <button class="btn-cancel" onclick="backFromPicker()">Back</button>
+        </div>
+        <button class="sheet-switch" onclick="pickFromGraph()">Tap someone in the tree instead</button>
       </div>
     </div>
   </div>
@@ -183,13 +238,20 @@
         <div class="detail-section" id="detailParents"></div>
         <div class="detail-section" id="detailChildren"></div>
         <div class="detail-section">
+          <label id="relAddLabel">Add relative</label>
+          <div class="rel-add-grid">
+            <button onclick="openRelSheet('parent')" id="btnAddParent">+ Parent</button>
+            <button onclick="openRelSheet('partner')" id="btnAddPartner">+ Partner</button>
+            <button onclick="openRelSheet('child')">+ Child</button>
+            <button onclick="openRelSheet('sibling')" id="btnAddSibling">+ Sibling</button>
+          </div>
+        </div>
+        <div class="detail-section">
           <label>Notes</label>
           <textarea id="editNotes"></textarea>
         </div>
         <div class="detail-actions">
           <button class="btn-hide" id="btnHideChildren" onclick="toggleHideChildren()">Hide Children</button>
-          <button class="btn-partner" id="btnPartner" onclick="enterPartnerMode()">Select Partner</button>
-          <button class="btn-parent" onclick="enterParentMode()">Add Parent</button>
           <button class="btn-delete" onclick="deleteFromDetail()">Delete</button>
           <button class="btn-close" onclick="saveAndCloseDetail()">Close</button>
         </div>
@@ -210,8 +272,7 @@
     let nextId = 1;
     let people = {};
     let selectedPersonId = null;
-    let parentMode = null;
-    let partnerMode = null;
+    let graphPick = null;   // { anchorId, relation } while picking from the graph
     let bloodlineMode = false;   // true when selecting or filtering
     let bloodlinePersonId = null; // person whose bloodline is shown
     let hiddenChildrenSet = new Set();
@@ -369,10 +430,8 @@
 
     cy.on('tap', 'node[type="person"]', function(evt) {
       const id = evt.target.id();
-      if (parentMode) {
-        assignParent(id);
-      } else if (partnerMode) {
-        assignPartner(id);
+      if (graphPick) {
+        graphPickTarget(id);
       } else if (bloodlineMode && !bloodlinePersonId) {
         applyBloodlineFilter(id);
       } else {
@@ -381,8 +440,7 @@
     });
     cy.on('tap', function(evt) {
       if (evt.target === cy) {
-        if (parentMode) exitParentMode();
-        if (partnerMode) exitPartnerMode();
+        if (graphPick) exitGraphPick();
         closeDetail();
       }
     });
@@ -557,29 +615,378 @@
       }
     }
 
-    // ── Add Person Modal ──
-    function openAddModal() {
-      document.getElementById('modalName').value = '';
-      document.getElementById('modal-overlay').classList.add('open');
-      setTimeout(() => document.getElementById('modalName').focus(), 50);
+    // The toolbar runs out of room on a phone, so every label has a short form.
+    function setBloodlineLabel(full, short) {
+      document.getElementById('bloodlineBtn').innerHTML =
+        '<span class="lbl-full">' + full + '</span><span class="lbl-short">' + short + '</span>';
     }
-    function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
-    async function confirmAdd() {
-      const name = document.getElementById('modalName').value.trim();
-      if (!name) return;
-      const res = await fetch('/api/trees/' + currentTreeId + '/people', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name })
-      });
-      const person = await res.json();
-      people[person.id] = person;
+
+    // ── Add a person, related or not ──────────────────────────────────────
+    // The old flow made a stray person and then asked you to find them in the
+    // graph and link them, twice over for a child of two parents. Nobody
+    // thinks of a relative that way: they are someone's daughter before they
+    // are anybody at all. So the relationship comes first and the whole thing
+    // is one sheet and one request.
+
+    // How each relation reads from the *new* person's side, plus the writes
+    // needed when the other party already exists.
+    const RELATIONS = {
+      parent:  { title: 'Add a parent',  of: 'parent of',  pick: 'Choose a parent' },
+      partner: { title: 'Add a partner', of: 'partner of', pick: 'Choose a partner' },
+      child:   { title: 'Add a child',   of: 'child of',   pick: 'Choose a child' },
+      sibling: { title: 'Add a sibling', of: 'sibling of', pick: 'Choose a sibling' },
+    };
+
+    let relSheet = null;   // { anchorId, relation } — anchorId null for a loose person
+
+    function openAddSheet() {
+      relSheet = { anchorId: null, relation: null, fromCard: false };
+      renderRelSheet();
+    }
+
+    function openRelSheet(relation) {
+      if (!selectedPersonId) return;
+      saveCurrentEdits();
+      relSheet = { anchorId: selectedPersonId, relation: relation, fromCard: true };
+      closeDetailKeepSelection();
+      renderRelSheet();
+    }
+
+    function closeRelSheet() {
+      document.getElementById('rel-overlay').classList.remove('open');
+      const anchorId = relSheet && relSheet.anchorId;
+      relSheet = null;
+      // Coming back from a relative sheet, land where you were.
+      if (anchorId && people[anchorId]) openDetail(anchorId);
+    }
+
+    function renderRelSheet() {
+      document.getElementById('relName').value = '';
+      document.getElementById('relYear').value = '';
+      renderRelContext();
+      showRelCreate();
+      document.getElementById('rel-overlay').classList.add('open');
+      setTimeout(function () { document.getElementById('relName').focus(); }, 60);
+    }
+
+    // Title, explanation and whatever the relation implies beyond a name.
+    // Split out from renderRelSheet so choosing a relative part-way through
+    // does not wipe what has already been typed.
+    function renderRelContext() {
+      const anchor = relSheet.anchorId ? people[relSheet.anchorId] : null;
+      const spec = relSheet.relation ? RELATIONS[relSheet.relation] : null;
+      const fixed = !!relSheet.fromCard;
+
+      document.getElementById('relTitle').textContent = spec && fixed ? spec.title : 'Add person';
+      document.getElementById('relSub').innerHTML = anchor && spec
+        ? 'They will be the ' + spec.of + ' <strong>' + escHtml(anchor.name) + '</strong>.'
+        : 'Add them on their own, or say how they are related below.';
+
+      const extra = document.getElementById('relExtra');
+      extra.innerHTML = '';
+
+      // Started from the toolbar: offer the relationship as an optional step.
+      if (!fixed) {
+        if (anchor && spec) {
+          extra.innerHTML = '<label class="sheet-label">Related to</label>' +
+            '<div class="sheet-note">' + escHtml(spec.of.charAt(0).toUpperCase() + spec.of.slice(1)) +
+            ' <strong>' + escHtml(anchor.name) + '</strong>' +
+            '<button class="rel-clear" onclick="clearRelChoice()" title="Remove">&times;</button></div>';
+        } else {
+          extra.innerHTML = '<label class="sheet-label">Related to <span class="opt">— optional</span></label>' +
+            '<div class="rel-add-grid">' +
+            Object.keys(RELATIONS).map(function (r) {
+              return '<button onclick="chooseRelFor(\'' + r + '\')">' +
+                escHtml(RELATIONS[r].of.charAt(0).toUpperCase() + RELATIONS[r].of.slice(1)) + '…</button>';
+            }).join('') + '</div>';
+        }
+      }
+
+      if (anchor && relSheet.relation === 'child' && anchor.partner && people[anchor.partner]) {
+        extra.innerHTML += '<label class="sheet-check">' +
+          '<input type="checkbox" id="relWithPartner" checked>' +
+          '<span>Also a child of <strong>' + escHtml(people[anchor.partner].name) + '</strong></span></label>';
+      } else if (anchor && relSheet.relation === 'sibling') {
+        const names = [anchor.parent1, anchor.parent2]
+          .filter(function (p) { return p && people[p]; })
+          .map(function (p) { return escHtml(people[p].name); });
+        extra.innerHTML += '<div class="sheet-note">Will share ' +
+          (names.length > 1 ? 'parents ' : 'parent ') + names.join(' and ') + '.</div>';
+      } else if (anchor && relSheet.relation === 'parent' && anchor.parent1 && people[anchor.parent1]) {
+        extra.innerHTML += '<div class="sheet-note">Second parent, alongside ' +
+          escHtml(people[anchor.parent1].name) + '.</div>';
+      }
+
+      document.getElementById('relSwitchBtn').style.display = (fixed && relSheet.relation) ? '' : 'none';
+    }
+
+    // Toolbar route: pick the relationship, then who it is to.
+    function chooseRelFor(relation) {
+      relSheet.relation = relation;
+      showRelPicker();
+    }
+
+    function clearRelChoice() {
+      relSheet.anchorId = null;
+      relSheet.relation = null;
+      renderRelContext();
+    }
+
+    function showRelCreate() {
+      document.getElementById('relCreate').style.display = '';
+      document.getElementById('relPick').style.display = 'none';
+      hideRelErrors();
+    }
+
+    function hideRelErrors() {
+      document.getElementById('relError').classList.remove('show');
+      document.getElementById('relPickError').classList.remove('show');
+    }
+
+    function relFail(elId, message) {
+      const el = document.getElementById(elId);
+      el.textContent = message;
+      el.classList.add('show');
+    }
+
+    async function confirmRelAdd() {
+      if (!relSheet) return;
+      const name = document.getElementById('relName').value.trim();
+      if (!name) { relFail('relError', 'Give them a name first.'); return; }
+      const birthYear = document.getElementById('relYear').value.trim();
+      const withPartner = !!(document.getElementById('relWithPartner') || {}).checked;
+
+      const body = { name: name, birthYear: birthYear };
+      if (relSheet.relation) {
+        body.attach = { relation: relSheet.relation, anchorId: relSheet.anchorId, withPartner: withPartner };
+      }
+
+      const btn = document.getElementById('relAddBtn');
+      btn.disabled = true;
+      btn.textContent = 'Adding…';
+      try {
+        const res = await fetch('/api/trees/' + currentTreeId + '/people', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (!res.ok) { relFail('relError', data.error || 'Could not add them.'); return; }
+        people[data.person.id] = data.person;
+        if (data.anchor) people[data.anchor.id] = data.anchor;
+        rebuildGraph();
+        const newId = data.person.id;
+        relSheet = null;
+        document.getElementById('rel-overlay').classList.remove('open');
+        // Bring them into view behind the card, so closing it shows where they
+        // landed rather than leaving you to hunt for them.
+        const node = cy.getElementById(newId);
+        if (node.length) cy.animate({ center: { eles: node }, zoom: Math.max(cy.zoom(), 0.8) }, { duration: 250 });
+        // Open the person just made: a birth year or photo is then one tap away.
+        openDetail(newId);
+      } catch (e) {
+        relFail('relError', 'Could not reach the server. Try again.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Add';
+      }
+    }
+
+    // ── Linking someone already in the tree ──
+    // Searching a list beats hunting for a 12px node on a phone.
+    function showRelPicker() {
+      document.getElementById('relCreate').style.display = 'none';
+      document.getElementById('relPick').style.display = '';
+      hideRelErrors();
+      const spec = RELATIONS[relSheet.relation];
+      document.getElementById('relTitle').textContent = spec.pick;
+      document.getElementById('relSub').innerHTML = relSheet.fromCard
+        ? 'They will be the ' + spec.of + ' <strong>' + escHtml(people[relSheet.anchorId].name) + '</strong>.'
+        : 'The new person will be the ' + spec.of + ' whoever you choose.';
+      document.getElementById('relSearch').value = '';
+      renderRelPicker();
+      setTimeout(function () { document.getElementById('relSearch').focus(); }, 60);
+    }
+
+    function backFromPicker() {
+      if (!relSheet.fromCard && !relSheet.anchorId) relSheet.relation = null;
+      renderRelContext();
+      showRelCreate();
+    }
+
+    function renderRelPicker() {
+      const q = document.getElementById('relSearch').value.trim().toLowerCase();
+      const anchorId = relSheet.anchorId;
+      const list = Object.values(people)
+        .filter(function (p) { return p.id !== anchorId; })
+        .filter(function (p) { return !q || p.name.toLowerCase().indexOf(q) !== -1; })
+        .sort(function (a, b) { return a.name.localeCompare(b.name); });
+
+      const el = document.getElementById('relList');
+      if (!list.length) {
+        el.innerHTML = '<div class="pick-empty">Nobody here by that name.</div>';
+        return;
+      }
+      el.innerHTML = list.map(function (p) {
+        const avatar = p.photo
+          ? '<img class="pick-avatar" src="' + p.photo + '" alt="">'
+          : '<span class="pick-avatar">' + escHtml((p.name || '?').charAt(0).toUpperCase()) + '</span>';
+        const meta = [p.birthYear, describeRelations(p)].filter(Boolean).join(' · ');
+        return '<button class="pick-row" onclick="pickExisting(\'' + p.id + '\')">' + avatar +
+          '<span class="pick-name">' + escHtml(p.name) +
+          (meta ? '<span>' + escHtml(meta) + '</span>' : '') + '</span></button>';
+      }).join('');
+    }
+
+    // A line of context so two cousins with the same name can be told apart.
+    function describeRelations(p) {
+      const bits = [];
+      const parents = [p.parent1, p.parent2].filter(function (x) { return x && people[x]; });
+      if (parents.length) bits.push('child of ' + parents.map(function (x) { return people[x].name; }).join(' & '));
+      if (p.partner && people[p.partner]) bits.push('with ' + people[p.partner].name);
+      return bits.join(', ');
+    }
+
+    async function pickExisting(otherId) {
+      if (!relSheet || !relSheet.relation) return;
+      // Toolbar route: nothing exists to link yet, so this just records who
+      // the new person will be related to.
+      if (!relSheet.fromCard) {
+        relSheet.anchorId = otherId;
+        renderRelContext();
+        showRelCreate();
+        setTimeout(function () { document.getElementById('relName').focus(); }, 60);
+        return;
+      }
+      const anchorId = relSheet.anchorId;
+      const relation = relSheet.relation;
+      const problem = relationProblem(anchorId, relation, otherId);
+      if (problem) { relFail('relPickError', problem); return; }
+
+      relSheet = null;
+      document.getElementById('rel-overlay').classList.remove('open');
+      await applyRelation(anchorId, relation, otherId);
+      if (people[anchorId]) openDetail(anchorId);
+    }
+
+    // Reasons a link cannot be made, phrased for the person reading them.
+    function relationProblem(anchorId, relation, otherId) {
+      const anchor = people[anchorId], other = people[otherId];
+      if (!anchor || !other) return 'That person is no longer in the tree.';
+      if (relation === 'parent') {
+        if (anchor.parent1 === otherId || anchor.parent2 === otherId) return other.name + ' is already a parent of ' + anchor.name + '.';
+        if (anchor.parent1 && anchor.parent2) return anchor.name + ' already has two parents. Remove one first.';
+        if (isAncestorOf(anchorId, otherId)) return other.name + ' already descends from ' + anchor.name + ', so that would loop back on itself.';
+      }
+      if (relation === 'child') {
+        if (other.parent1 === anchorId || other.parent2 === anchorId) return other.name + ' is already a child of ' + anchor.name + '.';
+        if (other.parent1 && other.parent2) return other.name + ' already has two parents. Remove one first.';
+        if (isAncestorOf(otherId, anchorId)) return anchor.name + ' already descends from ' + other.name + ', so that would loop back on itself.';
+      }
+      if (relation === 'partner') {
+        if (other.partner && other.partner !== anchorId) return other.name + ' already has a partner. Remove it first.';
+        if (anchor.partner && anchor.partner !== otherId) return anchor.name + ' already has a partner. Remove it first.';
+      }
+      if (relation === 'sibling') {
+        if (!anchor.parent1 && !anchor.parent2) return 'Give ' + anchor.name + ' a parent first — a sibling is someone who shares them.';
+        if (other.parent1 || other.parent2) return other.name + ' already has parents recorded. Remove them first.';
+      }
+      return null;
+    }
+
+    // Walking up from `descendantId`, do we meet `id`?
+    function isAncestorOf(id, descendantId) {
+      const stack = [descendantId], seen = {};
+      while (stack.length) {
+        const cur = stack.pop();
+        if (cur === id) return true;
+        if (seen[cur]) continue;
+        seen[cur] = 1;
+        const p = people[cur];
+        if (!p) continue;
+        if (p.parent1) stack.push(p.parent1);
+        if (p.parent2) stack.push(p.parent2);
+      }
+      return false;
+    }
+
+    async function applyRelation(anchorId, relation, otherId) {
+      const anchor = people[anchorId], other = people[otherId];
+      const writes = [];
+
+      if (relation === 'parent' || relation === 'child') {
+        // Same edit either way round: the child carries the link.
+        const child = relation === 'parent' ? anchor : other;
+        const parentId = relation === 'parent' ? otherId : anchorId;
+        const slot = child.parent1 ? 'parent2' : 'parent1';
+        child[slot] = parentId;
+        writes.push([child.id, slotUpdate(slot, parentId)]);
+      } else if (relation === 'partner') {
+        if (anchor.partner && anchor.partner !== otherId && people[anchor.partner]) {
+          people[anchor.partner].partner = null;
+          writes.push([anchor.partner, { partner: null }]);
+        }
+        anchor.partner = otherId;
+        other.partner = anchorId;
+        writes.push([anchorId, { partner: otherId }], [otherId, { partner: anchorId }]);
+      } else if (relation === 'sibling') {
+        other.parent1 = anchor.parent1;
+        other.parent2 = anchor.parent2;
+        writes.push([otherId, { parent1: anchor.parent1, parent2: anchor.parent2 }]);
+      }
+
       rebuildGraph();
-      closeModal();
+      await Promise.all(writes.map(function (w) {
+        return fetch('/api/trees/' + currentTreeId + '/people/' + w[0], {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(w[1])
+        });
+      }));
     }
-    document.getElementById('modalName').addEventListener('keydown', function(e) {
-      if (e.key === 'Enter') confirmAdd();
-      if (e.key === 'Escape') closeModal();
+
+    function slotUpdate(slot, value) {
+      const o = {};
+      o[slot] = value;
+      return o;
+    }
+
+    // Escape hatch: the graph is still the nicest picker on a big screen.
+    function pickFromGraph() {
+      if (!relSheet) return;
+      const anchorId = relSheet.anchorId, relation = relSheet.relation;
+      relSheet = null;
+      document.getElementById('rel-overlay').classList.remove('open');
+      graphPick = { anchorId: anchorId, relation: relation };
+      selectedPersonId = anchorId;
+      document.getElementById('graphPickText').textContent = 'Tap the ' + RELATIONS[relation].of.replace(' of', '') + ' of ' + people[anchorId].name + '.';
+      document.getElementById('parent-banner').classList.add('open');
+      cy.getElementById(anchorId).addClass('highlighted');
+    }
+
+    function exitGraphPick() {
+      if (graphPick) cy.getElementById(graphPick.anchorId).removeClass('highlighted');
+      graphPick = null;
+      document.getElementById('parent-banner').classList.remove('open');
+    }
+
+    async function graphPickTarget(targetId) {
+      const anchorId = graphPick.anchorId, relation = graphPick.relation;
+      if (targetId === anchorId) return;
+      const problem = relationProblem(anchorId, relation, targetId);
+      exitGraphPick();
+      if (problem) { alert(problem); return; }
+      await applyRelation(anchorId, relation, targetId);
+      openDetail(anchorId);
+    }
+
+    document.getElementById('relName').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') confirmRelAdd();
+      if (e.key === 'Escape') closeRelSheet();
+    });
+    document.getElementById('relYear').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') confirmRelAdd();
+      if (e.key === 'Escape') closeRelSheet();
     });
 
     // ── Detail Card (inline editable) ──
@@ -610,14 +1017,11 @@
       }
 
       const partnerDiv = document.getElementById('detailPartner');
-      const btnPartner = document.getElementById('btnPartner');
       if (person.partner && people[person.partner]) {
         partnerDiv.innerHTML = '<label>Partner</label><p>' +
           relChip(person.partner, people[person.partner].name, 'removePartner()', 'Remove partner') + '</p>';
-        btnPartner.textContent = 'Change Partner';
       } else {
         partnerDiv.innerHTML = '<label>Partner</label><p style="color:#999">None set</p>';
-        btnPartner.textContent = 'Select Partner';
       }
 
       const parentsDiv = document.getElementById('detailParents');
@@ -647,6 +1051,20 @@
         btnHide.style.display = '';
         btnHide.textContent = hiddenChildrenSet.has(id) ? 'Show Children' : 'Hide Children';
       }
+
+      // Grey out what this person cannot have, rather than letting someone
+      // fill in a whole form and then be told no.
+      const hasBothParents = !!(person.parent1 && person.parent2);
+      const btnAddParent = document.getElementById('btnAddParent');
+      btnAddParent.disabled = hasBothParents;
+      btnAddParent.title = hasBothParents ? 'Already has two parents' : '';
+      const btnAddPartner = document.getElementById('btnAddPartner');
+      btnAddPartner.disabled = !!person.partner;
+      btnAddPartner.title = person.partner ? 'Already has a partner' : '';
+      const btnAddSibling = document.getElementById('btnAddSibling');
+      const hasAnyParent = !!(person.parent1 || person.parent2);
+      btnAddSibling.disabled = !hasAnyParent;
+      btnAddSibling.title = hasAnyParent ? '' : 'Add a parent first — a sibling shares one';
 
       document.getElementById('detail-overlay').classList.add('open');
     }
@@ -685,6 +1103,12 @@
     function closeDetail() {
       document.getElementById('detail-overlay').classList.remove('open');
       selectedPersonId = null;
+    }
+
+    // Stepping from a card into a sheet about that same person: the card goes
+    // away but they are still who we are talking about.
+    function closeDetailKeepSelection() {
+      document.getElementById('detail-overlay').classList.remove('open');
     }
 
     // A related person: tap the name to walk there, tap the × to break the link.
@@ -766,54 +1190,6 @@
       rebuildGraph();
     }
 
-    // ── Select Parent Mode ───
-    function enterParentMode() {
-      if (!selectedPersonId) return;
-      const person = people[selectedPersonId];
-      if (person.parent1 && person.parent2) {
-        alert(person.name + ' already has two parents. Remove one with the \u00d7 beside their name first.');
-        return;
-      }
-      parentMode = { childId: selectedPersonId };
-      closeDetail();
-      document.getElementById('parent-banner').classList.add('open');
-      cy.getElementById(selectedPersonId).addClass('highlighted');
-    }
-
-    function exitParentMode() {
-      if (parentMode) {
-        cy.getElementById(parentMode.childId).removeClass('highlighted');
-      }
-      parentMode = null;
-      document.getElementById('parent-banner').classList.remove('open');
-    }
-
-    async function assignParent(targetId) {
-      if (!parentMode) return;
-      const childId = parentMode.childId;
-      if (targetId === childId) return;
-      const child = people[childId];
-      if (!child) { exitParentMode(); return; }
-
-      const update = {};
-      if (!child.parent1) {
-        child.parent1 = targetId;
-        update.parent1 = targetId;
-      } else if (!child.parent2) {
-        if (child.parent1 === targetId) { exitParentMode(); return; }
-        child.parent2 = targetId;
-        update.parent2 = targetId;
-      }
-
-      exitParentMode();
-      rebuildGraph();
-      await fetch('/api/trees/' + currentTreeId + '/people/' + childId, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(update)
-      });
-    }
-
     // Breaking a parent/child link is the same edit seen from either end, so
     // the chips in both the Parents and the Children list come through here.
     async function removeParentLink(childId, parentId) {
@@ -833,61 +1209,6 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(update)
       });
-    }
-
-    // ── Select Partner Mode ──
-    function enterPartnerMode() {
-      const id = selectedPersonId;
-      if (!id) return;
-      // "Change Partner" leaves the current one in place until a new one is
-      // actually picked, so backing out costs nothing
-      partnerMode = { personId: id };
-      closeDetail();
-      document.getElementById('partner-banner').classList.add('open');
-      cy.getElementById(id).addClass('highlighted');
-    }
-
-    function exitPartnerMode() {
-      if (partnerMode) {
-        cy.getElementById(partnerMode.personId).removeClass('highlighted');
-      }
-      partnerMode = null;
-      document.getElementById('partner-banner').classList.remove('open');
-    }
-
-    async function assignPartner(targetId) {
-      if (!partnerMode) return;
-      const personId = partnerMode.personId;
-      if (targetId === personId) return;
-      const person = people[personId];
-      const target = people[targetId];
-      if (!person || !target) { exitPartnerMode(); return; }
-      if (target.partner && target.partner !== personId) {
-        alert(target.name + ' already has a partner. Remove it from their card first.');
-        return;
-      }
-
-      exitPartnerMode();
-      // swapping partners: let go of the previous one first
-      if (person.partner && person.partner !== targetId) {
-        await removePartnerLink(personId, { redraw: false });
-      }
-      person.partner = targetId;
-      target.partner = personId;
-
-      rebuildGraph();
-      await Promise.all([
-        fetch('/api/trees/' + currentTreeId + '/people/' + personId, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ partner: targetId })
-        }),
-        fetch('/api/trees/' + currentTreeId + '/people/' + targetId, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ partner: personId })
-        })
-      ]);
     }
 
     async function removePartner() {
@@ -929,7 +1250,7 @@
       } else {
         bloodlineMode = true;
         bloodlinePersonId = null;
-        document.getElementById('bloodlineBtn').textContent = 'Show All';
+        setBloodlineLabel('Show All', 'Show All');
         document.getElementById('bloodline-banner-text').textContent = 'Click a person to show their bloodline.';
         document.getElementById('bloodline-banner').classList.add('open');
       }
@@ -945,7 +1266,7 @@
     function clearBloodlineMode() {
       bloodlineMode = false;
       bloodlinePersonId = null;
-      document.getElementById('bloodlineBtn').textContent = 'Show Bloodline';
+      setBloodlineLabel('Show Bloodline', 'Bloodline');
       document.getElementById('bloodline-banner').classList.remove('open');
       rebuildGraph();
     }

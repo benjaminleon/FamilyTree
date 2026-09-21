@@ -28,6 +28,37 @@ git-ignored because it holds real names, notes and photos.
 `seed-test-data.sql` is the synthetic alternative (~45 people, code `AAA111`)
 for anything that shouldn't touch real data.
 
+## Adding people
+
+Most people use this on a phone, where hunting for a 12px node in a 70-person
+graph is the worst thing you can ask of someone. So a new relative is created
+*from* the person they are related to: their card has **+ Parent / + Partner /
++ Child / + Sibling**, and the sheet that opens takes a name and adds them
+already connected — one action, one request. Adding a child to someone with a
+partner offers "Also a child of …", checked by default, because a child of two
+parents was the case that used to need connecting twice.
+
+`POST /api/trees/:treeId/people` takes an optional `attach`:
+
+```json
+{ "name": "…", "birthYear": "…",
+  "attach": { "relation": "child|parent|partner|sibling",
+              "anchorId": "p12", "withPartner": true } }
+```
+
+It resolves the relationship before inserting anything, so a rejected link
+never leaves a stray person behind, and writes both halves of a two-sided link
+in one transaction. It returns `{ person, anchor }` — `anchor` is the other
+party when their row changed, or null.
+
+Relatives can equally be someone already in the tree: "Choose someone already
+in the tree" swaps the sheet for a searchable list (name, year, and who they
+belong to, so two cousins with the same name can be told apart). Tapping a node
+in the graph still works and is offered from that list for anyone on a big
+screen who prefers it. The toolbar's **Add Person** covers the loose case —
+the first person in a tree, or someone whose place you do not know yet — with
+the same relationship step as an optional extra.
+
 ## Layout
 
 `layout.js` (`FamilyLayout.compute`) decides where everyone goes; cytoscape only
