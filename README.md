@@ -37,11 +37,19 @@ individuals:
 1. **unions** — every distinct set of co-parents, plus childless couples
 2. **layers** — generations, where a child is always below every parent and a
    couple always shares a row (this is what pulls a married-in spouse down from
-   the top of the tree to sit beside their partner)
-3. **order** — per-row ordering that keeps spouses adjacent and minimises
-   crossings
+   the top of the tree to sit beside their partner). Someone with no children
+   of their own sinks to their shallowest sibling rather than floating at the
+   top, which is what stops their parents being stranded generations above the
+   rest of the family
+3. **order** — per-row ordering that keeps spouses adjacent, keeps a set of
+   siblings contiguous, and minimises crossings
 4. **x** — priority method, so children end up centred under their parents'
-   marriage bar
+   marriage bar, followed by a pass that closes the gaps inside each sibling
+   group and re-seats every junction on its own couple
+
+Disconnected families are laid out separately and then slotted into the
+leftmost column where the generations they actually occupy are free, so a
+shallow branch tucks in beside a deep one instead of widening the whole tree.
 
 It has no DOM dependency, so it can be run and checked offline:
 

@@ -225,11 +225,30 @@
     ids.forEach(function (id) {
       parentsOf[id].forEach(function (par) { childGroups[find(par)][find(id)] = 1; });
     });
+
+    // Siblings, by group, so a childless one can follow the rest of its brood
+    // down instead of being stranded at the top of the tree.
+    var siblingGroups = {};
+    groups.forEach(function (g) { siblingGroups[g] = {}; });
+    groups.forEach(function (g) {
+      for (var a in childGroups[g]) {
+        for (var b in childGroups[g]) if (a !== b) siblingGroups[a][b] = 1;
+      }
+    });
+    function hasKey(o) { for (var k in o) return true; return false; }
+
     for (pass = 0; pass < guard; pass++) {
       changed = false;
       groups.forEach(function (g) {
         var lowest = Infinity;
         for (var cg in childGroups[g]) lowest = Math.min(lowest, groupLayer[cg] - 1);
+        // Nobody below to answer to: sink to the shallowest sibling instead.
+        // Matching the *shallowest* is what keeps this safe — that sibling is
+        // the one already pinning the parents, so the move shortens this
+        // group's own edge without lengthening anyone else's.
+        if (lowest === Infinity && hasKey(siblingGroups[g])) {
+          for (var sg in siblingGroups[g]) lowest = Math.min(lowest, groupLayer[sg]);
+        }
         if (lowest !== Infinity && lowest > groupLayer[g]) { groupLayer[g] = lowest; changed = true; }
       });
       if (!changed) break;
@@ -305,7 +324,7 @@
 
     // ── layout node graph (persons on even ranks, unions/routing on odd) ────
 
-    var pos = {}, unionsOut = [], xCursor = 0;
+    var pos = {}, unionsOut = [], xCursor = 0, rowRight = [];
 
     var descCount = {};
     function descendantCount(id, seen) {
@@ -425,8 +444,9 @@
 
       function flatten(rank) {
         var out = [];
-        rank.items.forEach(function (item) {
-          item.nodes.forEach(function (n) { out.push(n); });
+        rank.items.forEach(function (item, slot) {
+          item.slot = slot;
+          item.nodes.forEach(function (n) { n.item = item; out.push(n); });
         });
         for (var i = 0; i < out.length; i++) out[i].idx = i;
         rank.flat = out;
@@ -440,6 +460,28 @@
         var c = 0;
         for (var r = 0; r + 1 < ranks.length; r++) c += countCrossings(ranks[r].flat, ranks[r + 1].flat);
         return c;
+      }
+
+      // Crossings alone don't decide whether a family reads as a family. A
+      // sibling bar can only stay short if the children hanging off it sit
+      // next to each other, so count the strangers wedged in between — spouses
+      // don't count, they travel inside their partner's item.
+      function wedged() {
+        var total = 0;
+        for (var r = 0; r < ranks.length; r++) {
+          ranks[r].nodes.forEach(function (n) {
+            if (n.kind !== 'union' || n.down.length < 2) return;
+            var lo = Infinity, hi = -Infinity, own = {};
+            n.down.forEach(function (c) {
+              if (!c.item) return;
+              lo = Math.min(lo, c.item.slot);
+              hi = Math.max(hi, c.item.slot);
+              own[c.item.slot] = 1;
+            });
+            for (var s = lo; s <= hi; s++) if (!own[s]) total++;
+          });
+        }
+        return total;
       }
       function snapshot() {
         return ranks.map(function (rank) {
@@ -490,7 +532,18 @@
               var a = items[i], b = items[i + 1];
               var before = pairCrossings(a, b, 'up') + pairCrossings(a, b, 'down');
               var after = pairCrossings(b, a, 'up') + pairCrossings(b, a, 'down');
-              if (after < before) {
+              // Crossings settle it when they differ; when the swap is neutral
+              // on crossings, let it through if it un-wedges a sibling group.
+              var take = after < before;
+              if (!take && after === before) {
+                var was = wedged();
+                items[i] = b; items[i + 1] = a;
+                flatten(ranks[r]);
+                if (wedged() < was) { improved = true; continue; }
+                items[i] = a; items[i + 1] = b;
+                flatten(ranks[r]);
+              }
+              if (take) {
                 items[i] = b; items[i + 1] = a;
                 flatten(ranks[r]);
                 improved = true;
@@ -499,24 +552,28 @@
             // a couple can also read better the other way round
             for (var j = 0; j < items.length; j++) {
               if (items[j].nodes.length < 2) continue;
-              var base = localCrossings(r);
+              var baseCross = localCrossings(r), baseWedge = wedged();
               items[j].nodes.reverse();
               flatten(ranks[r]);
-              if (localCrossings(r) >= base) { items[j].nodes.reverse(); flatten(ranks[r]); }
-              else improved = true;
+              var nowCross = localCrossings(r);
+              if (nowCross > baseCross || (nowCross === baseCross && wedged() >= baseWedge)) {
+                items[j].nodes.reverse(); flatten(ranks[r]);
+              } else improved = true;
             }
           }
         }
       }
 
-      var best = snapshot(), bestCross = totalCrossings();
-      for (var it = 0; it < cfg.orderIterations && bestCross > 0; it++) {
+      var best = snapshot(), bestCross = totalCrossings(), bestWedge = wedged();
+      for (var it = 0; it < cfg.orderIterations && (bestCross > 0 || bestWedge > 0); it++) {
         // finish on a downward sweep so junctions end up ordered the way their
         // parents are — otherwise a trunk can be forced off its own couple
         medianSweep(it % 2 === 1);
         transpose();
-        var cross = totalCrossings();
-        if (cross <= bestCross) { bestCross = cross; best = snapshot(); }
+        var cross = totalCrossings(), wedge = wedged();
+        if (cross < bestCross || (cross === bestCross && wedge <= bestWedge)) {
+          bestCross = cross; bestWedge = wedge; best = snapshot();
+        }
       }
       restore(best);
 
@@ -565,7 +622,7 @@
         if (i === items.length - 1) { items[i].x += amount; return amount; }
         var slack = items[i + 1].x - items[i].x - sepOf(items[i], items[i + 1]);
         var moved = Math.max(0, Math.min(slack, amount));
-        if (moved < amount && items[i + 1].prio < prio) {
+        if (moved < amount && items[i + 1].prio <= prio) {
           moved += moveRight(items, i + 1, amount - moved, prio);
         }
         items[i].x += moved;
@@ -576,7 +633,7 @@
         if (i === 0) { items[i].x -= amount; return amount; }
         var slack = items[i].x - items[i - 1].x - sepOf(items[i - 1], items[i]);
         var moved = Math.max(0, Math.min(slack, amount));
-        if (moved < amount && items[i - 1].prio < prio) {
+        if (moved < amount && items[i - 1].prio <= prio) {
           moved += moveLeft(items, i - 1, amount - moved, prio);
         }
         items[i].x -= moved;
@@ -585,7 +642,7 @@
 
       function xSweep(down) {
         var seq = [], r1, r2;
-        if (down) { for (r1 = 1; r1 < ranks.length; r1++) seq.push(r1); }
+        if (down) { for (r1 = 0; r1 < ranks.length; r1++) seq.push(r1); }
         else { for (r2 = ranks.length - 2; r2 >= 0; r2--) seq.push(r2); }
         seq.forEach(function (r) {
           var rank = ranks[r];
@@ -594,6 +651,22 @@
             item.nodes.forEach(function (n) {
               (down ? n.up : n.down).forEach(function (m) { vals.push(m.x - n.off); });
             });
+            // Nobody above to answer to — the founders of the tree, and anyone
+            // who married in. Left to stand still they end up at one end of
+            // their own sibling bar, which then has to reach across the
+            // drawing to find them, so let them answer to their children.
+            // ...and look through the junction to the children it feeds:
+            // aiming at the junction itself is a fixed point, since the
+            // junction is placed on them in turn.
+            if (down && !vals.length) {
+              item.nodes.forEach(function (n) {
+                n.down.forEach(function (m) {
+                  if (m.kind === 'union' && m.down.length) {
+                    m.down.forEach(function (c) { vals.push(c.x - n.off); });
+                  } else vals.push(m.x - n.off);
+                });
+              });
+            }
             item.target = vals.length ? average(vals) : item.x;
           });
           var byPrio = rank.items.map(function (_, i) { return i; })
@@ -607,11 +680,106 @@
         });
       }
 
-      for (var xi = 0; xi < cfg.xIterations; xi++) xSweep(xi % 2 === 0);
+      // The priority method places children one at a time, each aiming at the
+      // same junction, so a brood can drift sideways as a body — or sprawl —
+      // even with nothing wedged between them. Close the gaps inside each
+      // sibling run and slide the run bodily under its junction.
+      function packSiblings() {
+        var unionNodes = [];
+        ranks.forEach(function (rank) {
+          rank.nodes.forEach(function (n) { if (n.kind === 'union' && n.down.length) unionNodes.push(n); });
+        });
+        unionNodes.forEach(function (un) {
+          var rank = ranks[un.rank + 1];
+          if (!rank) return;
+          var items = rank.items, own = {}, lo = Infinity, hi = -Infinity, s, i;
+          un.down.forEach(function (c) {
+            if (!c.item) return;
+            own[c.item.slot] = 1;
+            lo = Math.min(lo, c.item.slot);
+            hi = Math.max(hi, c.item.slot);
+          });
+          if (lo === Infinity) return;
+          // A stranger in the middle is not ours to move.
+          for (s = lo; s <= hi; s++) if (!own[s]) return;
+
+          // Repack the run at minimum separation, keeping its centre put.
+          var total = 0;
+          for (i = lo; i <= hi; i++) {
+            if (i > lo) total += gapBetween(items[i - 1], items[i]);
+            total += items[i].w;
+          }
+          var centre = (items[lo].x - items[lo].w / 2 + items[hi].x + items[hi].w / 2) / 2;
+          var cursor = centre - total / 2, want = [];
+          for (i = lo; i <= hi; i++) {
+            if (i > lo) cursor += gapBetween(items[i - 1], items[i]);
+            want.push(cursor + items[i].w / 2);
+            cursor += items[i].w;
+          }
+
+          // Centre the bar on the junction, as far as the neighbours allow.
+          var barLo = Infinity, barHi = -Infinity;
+          un.down.forEach(function (c) {
+            if (!c.item) return;
+            var x = want[c.item.slot - lo] + c.off;
+            barLo = Math.min(barLo, x);
+            barHi = Math.max(barHi, x);
+          });
+          // Aim at where the junction will end up — on its parents — not at
+          // where it happens to sit now, or the re-seating below just undoes
+          // the work and leaves the bar longer than it started.
+          var jx = un.x, sum = 0;
+          if (un.up.length) {
+            un.up.forEach(function (p) { sum += p.x; });
+            jx = sum / un.up.length;
+          }
+          var delta = jx - (barLo + barHi) / 2;
+          if (delta > 0) {
+            var roomR = hi + 1 < items.length
+              ? items[hi + 1].x - (want[hi - lo] + sepOf(items[hi], items[hi + 1])) : Infinity;
+            delta = Math.max(0, Math.min(delta, roomR));
+          } else if (delta < 0) {
+            var roomL = lo > 0
+              ? (want[0] - sepOf(items[lo - 1], items[lo])) - items[lo - 1].x : Infinity;
+            delta = -Math.max(0, Math.min(-delta, roomL));
+          }
+          for (i = lo; i <= hi; i++) items[i].x = want[i - lo] + delta;
+          syncNodes(rank);
+        });
+      }
+
+      for (var xi = 0; xi < cfg.xIterations; xi++) {
+        xSweep(xi % 2 === 0);
+        packSiblings();
+      }
       // A junction is not a free node: it is the point on the marriage bar the
       // children hang from. Finish downwards so every junction ends up back on
       // its parents (single parent included) and the children re-centre beneath.
       xSweep(true);
+      packSiblings();
+
+      // Junctions last. Packing a brood shifts people who are themselves
+      // parents further up, and a marriage bar that no longer meets its own
+      // couple is the most obvious way for the drawing to look broken — so
+      // re-seat every junction on its parents without disturbing anyone else.
+      ranks.forEach(function (rank, r) {
+        if (r % 2 === 0) return;
+        rank.items.forEach(function (item) {
+          var vals = [];
+          item.nodes.forEach(function (n) {
+            n.up.forEach(function (m) { vals.push(m.x - n.off); });
+          });
+          item.target = vals.length ? average(vals) : item.x;
+        });
+        rank.items.map(function (_, i) { return i; })
+          .sort(function (a, b) { return rank.items[b].prio - rank.items[a].prio; })
+          .forEach(function (i) {
+            var delta = rank.items[i].target - rank.items[i].x;
+            if (delta > 0.01) moveRight(rank.items, i, delta, rank.items[i].prio);
+            else if (delta < -0.01) moveLeft(rank.items, i, -delta, rank.items[i].prio);
+          });
+        syncNodes(rank);
+      });
 
       // ── 7. Score this attempt ────────────────────────────────────────────
       // Crossings alone don't say whether a tree reads well — a family strung
@@ -630,8 +798,6 @@
 
       return {
         ranks: ranks,
-        minX: minX,
-        maxX: maxX,
         cost: bestCross * cfg.costCrossing + reach + (maxX - minX) * cfg.costWidth,
       };
     }
@@ -643,15 +809,30 @@
         if (!winner || attempt.cost < winner.cost) winner = attempt;
       });
 
-      var shift = xCursor - winner.minX;
-      winner.ranks.forEach(function (rank) {
+      // Slot the family into the leftmost column where every generation it
+      // actually uses is clear. A two-row branch then tucks in alongside a
+      // deep one instead of shoving the whole drawing sideways — and leaving
+      // a tall empty margin under itself.
+      var shift = -Infinity;
+      winner.ranks.forEach(function (rank, r) {
+        var lo = Infinity;
+        rank.nodes.forEach(function (n) { lo = Math.min(lo, n.x - n.w / 2); });
+        if (lo === Infinity) return;
+        shift = Math.max(shift, (rowRight[r] === undefined ? 0 : rowRight[r] + cfg.componentGap) - lo);
+      });
+      if (shift === -Infinity) shift = 0;
+
+      winner.ranks.forEach(function (rank, r) {
+        var hi = -Infinity;
         rank.nodes.forEach(function (n) {
           n.x += shift;
+          hi = Math.max(hi, n.x + n.w / 2);
           if (n.kind === 'person') pos[n.person] = { x: n.x };
           else if (n.kind === 'union') n.union.x = n.x;
         });
+        if (hi > -Infinity) rowRight[r] = Math.max(rowRight[r] === undefined ? hi : rowRight[r], hi);
+        xCursor = Math.max(xCursor, hi);
       });
-      xCursor += (winner.maxX - winner.minX) + cfg.componentGap;
     });
 
 
@@ -708,7 +889,7 @@
       rows: rows,
       pos: pos,
       unions: unionsOut,
-      width: Math.max(0, xCursor - cfg.componentGap),
+      width: Math.max(0, xCursor),
       height: y - cfg.rowGap,
       config: cfg,
     };
