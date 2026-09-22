@@ -874,13 +874,59 @@
       (byRow[u.layer] = byRow[u.layer] || []).push(u);
     });
     Object.keys(byRow).forEach(function (layer) {
+      var bars = byRow[layer].sort(function (a, b) { return a.span[0] - b.span[0]; });
       var lanes = [];
-      byRow[layer].sort(function (a, b) { return a.span[0] - b.span[0]; }).forEach(function (u) {
+      bars.forEach(function (u) {
         var lane = 0;
         while (lanes[lane] !== undefined && lanes[lane] > u.span[0] - 1) lane++;
         lanes[lane] = u.span[1];
-        u.barY += lane * cfg.barStagger;
+        u.lane = lane;
       });
+
+      // Left-to-right packing gets the *number* of lanes right but picks which
+      // bar goes on top arbitrarily, and that choice is what decides whether a
+      // line has to cut across a neighbouring family. Of two bars, only the
+      // lower one's trunk reaches up through the other, and only the upper
+      // one's children drop down through it — so swap lanes wherever that is
+      // legal and draws better.
+      function overlaps(a, b) { return a.span[0] < b.span[1] && b.span[0] < a.span[1]; }
+      function costAbove(a, b) {
+        var c = (b.x > a.span[0] && b.x < a.span[1]) ? 1 : 0;
+        a.children.forEach(function (ch) {
+          var x = pos[ch].x;
+          if (x > b.span[0] && x < b.span[1]) c++;
+        });
+        return c;
+      }
+      function rowCost() {
+        var t = 0;
+        for (var i = 0; i < bars.length; i++) {
+          for (var j = 0; j < bars.length; j++) {
+            if (bars[i].lane < bars[j].lane) t += costAbove(bars[i], bars[j]);
+          }
+        }
+        return t;
+      }
+      function laneFree(u, lane) {
+        for (var i = 0; i < bars.length; i++) {
+          if (bars[i] !== u && bars[i].lane === lane && overlaps(bars[i], u)) return false;
+        }
+        return true;
+      }
+      var improved = true, rounds = 0;
+      while (improved && rounds++ < 4) {
+        improved = false;
+        for (var i = 0; i < bars.length; i++) {
+          for (var j = i + 1; j < bars.length; j++) {
+            if (bars[i].lane === bars[j].lane) continue;
+            var before = rowCost(), li = bars[i].lane, lj = bars[j].lane;
+            bars[i].lane = lj; bars[j].lane = li;
+            if (laneFree(bars[i], lj) && laneFree(bars[j], li) && rowCost() < before) improved = true;
+            else { bars[i].lane = li; bars[j].lane = lj; }
+          }
+        }
+      }
+      bars.forEach(function (u) { u.barY += u.lane * cfg.barStagger; });
     });
 
     return {
